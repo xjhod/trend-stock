@@ -29,6 +29,7 @@
         <button class="s-tab" id="tab-highfit" title="市值≥1000亿的高适配机构白马，按行业分类">高适配</button>
         <button class="s-tab" id="tab-scan" title="每日收盘后自动扫描高适配池，出现机会的股票">今日机会</button>
         <button class="s-tab" id="tab-paper" title="今日机会虚拟买入，每日跟踪，按规则决定卖出（20日实验）">模拟持仓</button>
+        <button class="s-tab" id="tab-pos" title="登记你的真实持仓（买入日期/价格），只有持仓股会显示卖出提示">我的持仓</button>
       </div>
       <div id="panel-watch">
         <div class="add-box">
@@ -58,6 +59,22 @@
         <div class="paper-summary" id="paper-summary"></div>
         <div class="paper-note">今日机会82只已于 2026-08-28 虚拟买入（每只10万）。每日「↻ 更新」后按规则给出离场建议，20个交易日后结算。</div>
         <div class="scan-list" id="paper-list"></div>
+      </div>
+      <div id="panel-pos" style="display:none">
+        <div class="pos-add">
+          <input type="text" id="pos-code" placeholder="代码/名称" maxlength="10">
+          <input type="date" id="pos-date">
+          <input type="number" id="pos-price" placeholder="买入价" step="0.01" min="0">
+          <input type="number" id="pos-qty" placeholder="数量" min="0">
+          <button id="pos-add-btn" title="登记持仓">＋登记</button>
+        </div>
+        <div class="hf-toolbar">
+          <span id="pos-info">我的持仓加载中…</span>
+          <button class="hf-refresh" id="pos-refresh" title="刷新行情与卖出建议">↻ 刷新</button>
+        </div>
+        <div class="paper-summary" id="pos-summary"></div>
+        <div class="paper-note">登记你的真实持仓后，只有这里的股票会显示卖出/止损提示；今日机会等推荐页始终是买入视角，不会提示卖出。</div>
+        <div class="scan-list" id="pos-list"></div>
       </div>
       <div class="sidebar-foot">点击股票查看趋势全景</div>
     </aside>
@@ -239,6 +256,6 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=40"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

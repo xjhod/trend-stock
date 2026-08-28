@@ -18,3 +18,4 @@ research/*.json
 
 # 模拟持仓(用户实验数据)
 paper_trades.json
+my_positions.json

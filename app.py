@@ -17,6 +17,7 @@ import scan_daily
 import notify
 import updater
 import paper_trade
+import positions
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
@@ -323,10 +324,14 @@ def api_stock(code):
     except Exception:
         pass
 
+    # 该股是否在"我的持仓"（只有持仓股才有卖出提示）
+    pos_info = _safe_call(lambda: positions.stock_position_info(code, daily), {"in_position": False})
+
     return jsonify({
         "ok": True,
         "code": code,
         "in_scan": in_scan,
+        "position": pos_info,
         "quote": quote,
         "trends": trends,
         "tech": tech,
@@ -459,6 +464,27 @@ def api_paper_refresh():
     """手动刷新一次: 更新行情 + 执行离场规则"""
     r = paper_trade.refresh()
     return jsonify(r)
+
+
+# ---------------- 我的持仓 ----------------
+@app.route("/api/positions", methods=["GET"])
+def api_positions():
+    """我的持仓列表（含最新行情/收益/离场建议）"""
+    return jsonify(positions.refresh())
+
+
+@app.route("/api/positions", methods=["POST"])
+def api_positions_add():
+    """登记持仓: {code, buy_date, buy_price, qty}"""
+    data = request.get_json(silent=True) or {}
+    r = positions.add_position(data.get("code", ""), data.get("buy_date", ""),
+                               data.get("buy_price", 0), data.get("qty", 0))
+    return jsonify(r)
+
+
+@app.route("/api/positions/<code>", methods=["DELETE"])
+def api_positions_del(code):
+    return jsonify(positions.remove_position(code))
 
 
 @app.route("/")

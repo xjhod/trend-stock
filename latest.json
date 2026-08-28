@@ -1,5 +1,5 @@
 {
-  "version": "1.3.7",
-  "note": "修复：检查更新改用多源回退（GitHub直连+ghfast/ghproxy加速），解决国内访问 raw.githubusercontent 超时问题",
+  "version": "1.4.0",
+  "note": "新增「我的持仓」：手动登记真实持仓（买入日期/价格/数量），只有持仓股才显示卖出/止损提示；推荐与未持仓股保持纯买入视角，不再出现'假设持仓'的卖出信号",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

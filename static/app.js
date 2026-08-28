@@ -278,22 +278,18 @@
     else if (L.resonance_bear) html += '<div class="layer-reso reso-bear">✦ 看跌共振</div>';
     else html += '<div class="layer-reso reso-none">未共振</div>';
     html += '</div>';
-    // 离场监控（破线+大盘转弱双确认 / 破线后10%止损）
-    const ex = L.exit || {};
-    const stMap = {
-      hold: ["exit-hold", "持有", "趋势完好"],
-      watch: ["exit-watch", "双确认中", "破线但大盘未转弱"],
-      exit_signal: ["exit-go", "离场信号", "破线+大盘转弱"],
-      stop: ["exit-stop", "止损", "破线后回撤≥10%"],
-      no_position: ["exit-none", "无持仓", ""]
-    };
-    const st = stMap[ex.state] || ["exit-none", "—", ""];
-    if (ex.state && ex.state !== "no_position") {
-      let ep = "";
-      if (ex.entry) ep = '参考建仓 ' + ex.entry.date + ' @' + ex.entry.price + '（' + ex.entry.days_ago + '日前，回撤 ' + ex.drawdown + '%）';
-      html += '<div class="layer-exit ' + st[0] + '"><span class="ex-badge">离场·' + st[1] + '</span><span class="ex-desc">' + (ex.desc || st[2]) + (ep ? '　' + ep : '') + '</span></div>';
+    // 持仓卖出提示（仅"我的持仓"股显示；推荐/未持仓股无卖出信号）
+    const pos = d.position || {};
+    if (pos.in_position) {
+      const advMap = {
+        "持有": ["exit-hold", "持有", "持仓中"],
+        "建议止损": ["exit-stop", "止损", "回撤超10%"],
+        "建议离场": ["exit-watch", "离场", "破线+大盘转弱"]
+      };
+      const st = advMap[pos.advice] || ["exit-hold", "持有", ""];
+      html += '<div class="layer-exit ' + st[0] + '"><span class="ex-badge">持仓·' + st[1] + '</span><span class="ex-desc">' + (pos.note || st[2]) + '　买入 ' + (pos.buy_date || "--") + ' @' + pos.buy_price + (pos.ret_pct != null ? '（收益 ' + (pos.ret_pct >= 0 ? "+" : "") + pos.ret_pct + '%）' : '') + '</span></div>';
     } else {
-      html += '<div class="layer-exit exit-none"><span class="ex-badge">离场·无持仓</span><span class="ex-desc">近200日无三层共振建仓点</span></div>';
+      html += '<div class="layer-exit exit-none"><span class="ex-badge">未持仓</span><span class="ex-desc">未登记持仓，不显示卖出提示</span></div>';
     }
     el.innerHTML = html;
   }
@@ -350,9 +346,9 @@
   function renderConclusion(d) {
     const el = document.getElementById("conclusion");
     const c = d.conclusion || {};
-    const ex = (d.layers && d.layers.exit) || {};
-    // 被今日机会推荐买入的股票不显示"规避"（买入推荐与规避互斥）
-    const isExit = !d.in_scan && (ex.state === "stop" || ex.state === "exit_signal");
+    const pos = d.position || {};
+    // 规避/卖出提示只对"我的持仓"股显示；推荐、未持仓股无卖出信号
+    const isExit = pos.in_position && (pos.advice === "建议止损" || pos.advice === "建议离场");
     const base = c.rating === "偏多" ? "偏多" :
       c.rating === "谨慎偏多" ? "谨慎偏多" :
       c.rating === "偏空" ? "偏空" :
@@ -360,7 +356,7 @@
     const ratingText = isExit ? "规避" : base;
     const cls = isExit ? "c-rating neg" : "c-rating";
     let text = c.sentence || "--";
-    if (isExit) text = "持仓处于" + (ex.label || "离场") + "状态，建议以离场信号为准，暂不宜新买入。" + text;
+    if (isExit) text = "你的持仓（买入 " + (pos.buy_date || "--") + " @" + pos.buy_price + "）触发" + pos.advice + "：" + (pos.note || "") + "。" + text;
     el.innerHTML = '<div class="' + cls + '">' + ratingText + '</div><div class="c-text">' + text + '</div>';
   }
 
@@ -445,19 +441,16 @@
         lines.push("【层级共振】未形成共振：大盘" + dd[md] + "、" + (iname ? "行业(" + iname + ")" + dd[id] : "行业不明") + "、" + (sl === "up" ? "个股上升趋势线" : (sl === "down" ? "个股下降趋势线" : "个股无趋势线")) + "。");
       }
     }
-    // 4.6 离场监控（破线+大盘转弱双确认 / 破线后10%止损）
-    if (d.layers && d.layers.exit) {
-      const ex = d.layers.exit;
-      const txt = {
-        hold: "【离场】趋势完好，继续持有。",
-        watch: "【离场】已跌破上升趋势线，但大盘未转弱——双确认未成立，<strong>继续持有（避免卖飞）</strong>；若大盘转弱则触发双确认离场。",
-        exit_signal: "【离场】跌破上升趋势线 + 大盘转弱，<strong>双确认离场信号成立</strong>（回测：双确认可避免卖飞，但需配套破线后-10%止损）。",
-        stop: "【离场】破线后回撤已达 -10% 止损线，<strong>触发止损离场</strong>（控风险，实证将最大亏损从-76%压至-41%）。",
-        no_position: ""
-      }[ex.state] || "";
-      if (txt) {
-        const ep = (ex.entry && ex.holding) ? "（参考建仓 " + ex.entry.date + " @ " + ex.entry.price + "，距今" + ex.entry.days_ago + "日，当前回撤 " + ex.drawdown + "%）" : "";
-        lines.push(txt + ep);
+    // 4.6 持仓卖出提示（仅"我的持仓"股显示；推荐/未持仓股无卖出信号）
+    const pos = d.position || {};
+    if (pos.in_position) {
+      const rt = pos.ret_pct == null ? "--" : (pos.ret_pct >= 0 ? "+" : "") + pos.ret_pct + "%";
+      if (pos.advice === "建议止损") {
+        lines.push("【持仓】你的持仓触发<strong>止损建议</strong>（" + (pos.note || "回撤超10%") + "），买入 " + (pos.buy_date || "--") + " @" + pos.buy_price + "，当前收益 " + rt + "。");
+      } else if (pos.advice === "建议离场") {
+        lines.push("【持仓】" + (pos.note || "跌破MA20+大盘转弱") + "，建议<strong>离场</strong>。买入 " + (pos.buy_date || "--") + " @" + pos.buy_price + "，当前收益 " + rt + "。");
+      } else {
+        lines.push("【持仓】该股在你持仓中，买入 " + (pos.buy_date || "--") + " @" + pos.buy_price + "，当前收益 " + rt + "，趋势完好继续持有。");
       }
     }
     // 5 指标
@@ -1363,27 +1356,33 @@
   const tabHigh = document.getElementById("tab-highfit");
   const tabScan = document.getElementById("tab-scan");
   const tabPaper = document.getElementById("tab-paper");
+  const tabPos = document.getElementById("tab-pos");
   function switchTab(name) {
     const isWatch = name === "watch";
     const isHigh = name === "highfit";
     const isScan = name === "scan";
     const isPaper = name === "paper";
+    const isPos = name === "pos";
     tabWatch.classList.toggle("active", isWatch);
     tabHigh.classList.toggle("active", isHigh);
     tabScan.classList.toggle("active", isScan);
     if (tabPaper) tabPaper.classList.toggle("active", isPaper);
+    if (tabPos) tabPos.classList.toggle("active", isPos);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
     document.getElementById("panel-highfit").style.display = isHigh ? "" : "none";
     document.getElementById("panel-scan").style.display = isScan ? "" : "none";
     if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
+    if (document.getElementById("panel-pos")) document.getElementById("panel-pos").style.display = isPos ? "" : "none";
     if (isHigh && !hfData) loadHighfit();
     if (isScan) renderScanList();
     if (isPaper) renderPaper();
+    if (isPos) renderPositions();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
   tabHigh.addEventListener("click", function () { switchTab("highfit"); });
   tabScan.addEventListener("click", function () { switchTab("scan"); });
   if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
+  if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
   document.getElementById("hf-refresh").addEventListener("click", function () { loadHighfit(); });
   document.getElementById("scan-run").addEventListener("click", function () {
     const infoEl = document.getElementById("scan-info");
@@ -1484,6 +1483,87 @@
       renderPaper();
     }).catch(function () { if (infoEl) infoEl.textContent = "更新失败"; });
   });
+
+  // ---------- 我的持仓 ----------
+  function renderPositions() {
+    const listEl = document.getElementById("pos-list");
+    const sumEl = document.getElementById("pos-summary");
+    const infoEl = document.getElementById("pos-info");
+    if (!listEl) return;
+    fetch("/api/positions").then(r => r.json()).then(function (d) {
+      const sum = d.summary || {};
+      const ps = d.positions || [];
+      if (infoEl) infoEl.textContent = "持仓 " + sum.total + " 只 · 盈利 " + sum.wins + " · 建议卖出 " + sum.sell_count;
+      if (sumEl) {
+        sumEl.innerHTML =
+          '<div class="paper-s-card"><b>' + (sum.total || 0) + '</b><span>持仓数</span></div>' +
+          '<div class="paper-s-card"><b>' + (sum.wins || 0) + '</b><span>盈利中</span></div>' +
+          '<div class="paper-s-card ' + (sum.sell_count > 0 ? "neg" : "") + '"><b>' + (sum.sell_count || 0) + '</b><span>建议卖出</span></div>';
+      }
+      function rowHtml(p) {
+        const ret = p.ret_pct == null ? "--" : (p.ret_pct >= 0 ? "+" : "") + p.ret_pct + "%";
+        const c = p.ret_pct >= 0 ? "pos" : "neg";
+        const advC = p.advice === "建议止损" ? "exit-stop" : p.advice === "建议离场" ? "exit-watch" : "";
+        const advHtml = p.advice && p.advice !== "持有" ? '<span class="ex-badge" style="background:rgba(229,72,77,.28);color:#ff6b6b">' + p.advice + '</span>' : '';
+        return '<div class="scan-item" data-code="' + p.code + '" title="点击查看图形">' +
+          '<div class="scan-item-head"><span class="scan-name">' + (p.name || p.code) + ' <em>' + p.code + '</em></span>' +
+          '<span class="scan-level ' + c + '">' + ret + '</span></div>' +
+          '<div class="scan-item-sub">买入 ' + (p.buy_date || "--") + ' @' + p.buy_price + (p.qty ? ' ×' + p.qty : "") + ' · 现 ' + (p.cur_price || "--") + '</div>' +
+          '<div class="scan-tags">' + advHtml + (p.note ? '<span>' + p.note + '</span>' : '<span>持有中</span>') + '</div>' +
+          '<span class="pos-del" data-code="' + p.code + '" title="删除持仓">✕</span>' +
+          '</div>';
+      }
+      listEl.innerHTML = ps.length ? ps.map(rowHtml).join("") : '<div class="scan-empty">尚未登记持仓<br>在上方输入代码、买入日期/价格后点「＋登记」</div>';
+      listEl.querySelectorAll(".scan-item").forEach(function (el) {
+        el.addEventListener("click", function (ev) {
+          if (ev.target.classList.contains("pos-del")) return;
+          selectStock(el.getAttribute("data-code"));
+        });
+      });
+      listEl.querySelectorAll(".pos-del").forEach(function (el) {
+        el.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          const code = el.getAttribute("data-code");
+          fetch("/api/positions/" + code, { method: "DELETE" }).then(function () { renderPositions(); });
+        });
+      });
+    }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
+  }
+  // 登记持仓
+  function addPos() {
+    const code = (document.getElementById("pos-code").value || "").trim();
+    const date = document.getElementById("pos-date").value || "";
+    const price = parseFloat(document.getElementById("pos-price").value);
+    const qty = parseInt(document.getElementById("pos-qty").value) || 0;
+    if (!code) { alert("请输入股票代码或名称"); return; }
+    if (!date) { alert("请选择买入日期"); return; }
+    if (!price || isNaN(price) || price <= 0) { alert("请输入买入价"); return; }
+    fetch("/api/positions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code, buy_date: date, buy_price: price, qty: qty })
+    }).then(r => r.json()).then(function (d) {
+      if (d.ok) {
+        document.getElementById("pos-code").value = "";
+        document.getElementById("pos-price").value = "";
+        document.getElementById("pos-qty").value = "";
+        renderPositions();
+      } else { alert(d.msg || "登记失败"); }
+    }).catch(function () { alert("登记失败"); });
+  }
+  document.getElementById("pos-add-btn").addEventListener("click", addPos);
+  document.getElementById("pos-refresh").addEventListener("click", function () {
+    const infoEl = document.getElementById("pos-info");
+    if (infoEl) infoEl.textContent = "刷新中…";
+    renderPositions();
+  });
+  // 买入日期默认今天
+  (function () {
+    const dt = document.getElementById("pos-date");
+    if (dt) {
+      const d = new Date();
+      dt.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+  })();
 
   // ---------- 推送设置弹窗 ----------
   function cfgVal(id) {
