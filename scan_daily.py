@@ -63,29 +63,63 @@ def detect_bullish(df, last_n=6):
 
 
 def _scan_one(it):
+    """机会双通道:
+    通道A 超跌反弹(抄底): 60日回撤≥20% + 看涨形态
+          [实证: 回撤越深胜率越高(20%→55.8%, 25%→57.8%), 大盘弱时更高(58%),
+           放量反而降胜率→仅提示谨慎]
+    通道B 趋势机会(追涨): 日线上升趋势 + 看涨形态(放量加分)
+    """
     code = it.get("code"); name = it.get("name", ""); ind = it.get("ind", "")
     try:
         df = get_kline(code, "daily", 300, "qfq")
         if df is None or len(df) < 60:
             return None
-        # 与单股页一致：用严格趋势判断（analysis.analyze_trend）
         trend = an.analyze_trend(df, "日线")
         direction = trend.get("direction", "sideways")
         strength = trend.get("strength", "weak")
-        # 硬否决：下降趋势的股票绝不列为机会（形态在下跌趋势中无效）
-        if direction == "down":
-            return None
-        # 硬否决：处于"止损/双确认离场"的股票不进机会（买入推荐与卖出建议互斥）
-        _exit = layers.analyze_exit(code, df)
-        if _exit.get("holding") and _exit.get("state") in ("stop", "exit_signal"):
-            return None
         ly = layers.analyze_layers(code, df)
-        # 共振看涨：大盘↑ + 行业↑ + 个股严格趋势↑
-        reso = (ly["market"]["direction"] == "up" and
-                ly["industry"]["direction"] == "up" and
-                direction == "up")
+        mkt_dir = ly["market"]["direction"]
         pats = detect_bullish(df)
         vol_hit = any(p[2] for p in pats)
+        last = df.iloc[-1]
+        chg = float(last["close"]) / float(df.iloc[-2]["close"]) - 1 if len(df) >= 2 else 0
+        # 超跌检测: 60日(含当日)高点回撤
+        hi60 = max(df["high"].tolist()[-60:])
+        dd60 = float(last["close"]) / hi60 - 1
+
+        # ============ 通道A: 超跌反弹(抄底) ============
+        if dd60 <= -0.20 and pats:
+            level = 1
+            if dd60 <= -0.25:
+                level += 1
+            if mkt_dir == "down":
+                level += 1  # 大盘弱时胜率最高(58%)
+            level = min(level, 2)
+            tags = ["超跌反弹"]
+            tags.append("+".join(sorted(set(p[0] for p in pats))[:2]))
+            if mkt_dir == "down":
+                tags.append("大盘弱·抄底")
+            elif mkt_dir == "up":
+                tags.append("大盘强·谨慎")
+            if vol_hit:
+                tags.append("放量·谨慎")
+            return {
+                "code": code, "name": name, "ind": ind,
+                "type": "rebound", "level": level,
+                "price": round(float(last["close"]), 2),
+                "change_pct": round(chg * 100, 2),
+                "tags": tags, "resonance": False,
+                "direction": direction, "strength": strength,
+                "dd60": round(dd60 * 100, 1),
+                "pats": [p[0] for p in pats],
+            }
+
+        # ============ 通道B: 趋势机会(追涨) ============
+        if direction == "down":
+            return None
+        reso = (mkt_dir == "up" and
+                ly["industry"]["direction"] == "up" and
+                direction == "up")
         score = 0
         if reso:
             score += 2
@@ -93,8 +127,6 @@ def _scan_one(it):
             score += 2 if vol_hit else 1
         if score < 1:
             return None
-        last = df.iloc[-1]
-        chg = float(last["close"]) / float(df.iloc[-2]["close"]) - 1 if len(df) >= 2 else 0
         tags = []
         if reso:
             tags.append("三层共振")
@@ -105,13 +137,12 @@ def _scan_one(it):
             tags.append("上升趋势")
         return {
             "code": code, "name": name, "ind": ind,
-            "level": score,
+            "type": "trend", "level": score,
             "price": round(float(last["close"]), 2),
             "change_pct": round(chg * 100, 2),
             "tags": tags,
             "resonance": reso,
-            "direction": direction,
-            "strength": strength,
+            "direction": direction, "strength": strength,
             "pats": [p[0] for p in pats],
         }
     except Exception:

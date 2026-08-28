@@ -1396,15 +1396,23 @@
         return;
       }
       const stars = { 1: "★", 2: "★★", 3: "★★★" };
-      listEl.innerHTML = sigs.map(function (it) {
+      function itemHtml(it) {
+        const isR = it.type === "rebound";
         const col = it.level >= 2 ? "var(--accent)" : "var(--text-dim)";
         return '<div class="scan-item" data-code="' + it.code + '" title="点击查看图形">' +
-          '<div class="scan-item-head"><span class="scan-name">' + it.name + ' <em>' + it.code + '</em></span>' +
+          '<div class="scan-item-head"><span class="scan-type ' + (isR ? "reb" : "trd") + '">' + (isR ? "抄底" : "趋势") + '</span>' +
+          '<span class="scan-name">' + it.name + ' <em>' + it.code + '</em></span>' +
           '<span class="scan-level" style="color:' + col + '">' + (stars[it.level] || "★") + '</span></div>' +
           '<div class="scan-item-sub">' + (it.ind || "") + " · " + it.price + " " + (it.change_pct >= 0 ? "+" : "") + it.change_pct + '%</div>' +
           '<div class="scan-tags">' + (it.tags || []).map(function (t) { return "<span>" + t + "</span>"; }).join("") + '</div>' +
           '</div>';
-      }).join("");
+      }
+      const rebound = sigs.filter(function (s) { return s.type === "rebound"; });
+      const trend = sigs.filter(function (s) { return s.type !== "rebound"; });
+      let html = "";
+      if (rebound.length) html += '<div class="scan-group-title">超跌反弹 · 抄底（' + rebound.length + '）</div>' + rebound.map(itemHtml).join("");
+      if (trend.length) html += '<div class="scan-group-title">趋势机会 · 追涨（' + trend.length + '）</div>' + trend.map(itemHtml).join("");
+      listEl.innerHTML = html;
       listEl.querySelectorAll(".scan-item").forEach(function (el) {
         el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
       });

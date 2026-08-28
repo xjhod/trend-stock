@@ -348,6 +348,13 @@ body {
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 ::-webkit-scrollbar-track { background:transparent; }
 
+/* 机会列表分组 */
+.scan-group-title { font-size:12px; color:var(--text-dim); padding:9px 6px 4px; font-weight:700; border-top:1px solid var(--border); margin-top:4px; letter-spacing:.5px; }
+.scan-group-title:first-child { border-top:none; margin-top:0; }
+.scan-type { font-size:10px; padding:1px 6px; border-radius:4px; margin-right:6px; font-weight:700; vertical-align:1px; white-space:nowrap; }
+.scan-type.reb { background:rgba(255,152,0,.16); color:#ffb04a; border:1px solid rgba(255,152,0,.4); }
+.scan-type.trd { background:rgba(0,140,255,.14); color:#5cb0ff; border:1px solid rgba(0,140,255,.35); }
+
 /* 导入自选股弹窗 */
 
 .bt-btn { border:1px solid var(--accent) !important; color:var(--accent) !important; }
