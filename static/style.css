@@ -472,3 +472,8 @@ body {
 .cfg-row .sw i::after { content:""; position:absolute; width:14px; height:14px; border-radius:50%; background:#8b949e; top:2px; left:3px; transition:.2s; }
 .cfg-row .sw input:checked + i { background:rgba(230,185,30,.25); border-color:var(--accent); }
 .cfg-row .sw input:checked + i::after { left:20px; background:var(--accent); }
+/* 机会列表评级徽章 */
+.scan-rat { display:inline-block; font-size:10px; padding:0 5px; border-radius:8px; margin-right:4px; vertical-align:1px; }
+.scan-rat.up { background:rgba(38,166,91,.22); color:#3ecf8e; }
+.scan-rat.down { background:rgba(229,72,77,.22); color:#ff6b6b; }
+.scan-rat.flat { background:rgba(150,150,160,.22); color:#aaa; }

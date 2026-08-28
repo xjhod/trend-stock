@@ -62,6 +62,43 @@ def detect_bullish(df, last_n=6):
     return out
 
 
+def _calc_rating(code, daily):
+    """给机会信号算综合评级（复用 generate_conclusion，与单股页口径一致）"""
+    import concurrent.futures as cf
+    from data_fetcher import get_fund_flow, get_financials, guess_market
+    def fetch(kind):
+        try:
+            if kind == "weekly":
+                return get_kline(code, "weekly", 120, "qfq")
+            if kind == "monthly":
+                return get_kline(code, "monthly", 80, "qfq")
+            if kind == "ff":
+                return get_fund_flow(code, limit=60)
+            if kind == "fin":
+                return get_financials(code, guess_market(code), limit=8)
+        except Exception:
+            return None
+    if daily is None:
+        return "中性"
+    try:
+        with cf.ThreadPoolExecutor(max_workers=4) as ex:
+            fw = ex.submit(fetch, "weekly"); fm = ex.submit(fetch, "monthly")
+            fff = ex.submit(fetch, "ff"); fn = ex.submit(fetch, "fin")
+            weekly = fw.result(timeout=8); monthly = fm.result(timeout=8)
+            ff = fff.result(timeout=8); fin = fn.result(timeout=8)
+        trends = {
+            "daily": an.analyze_trend(daily, "日线"),
+            "weekly": an.analyze_trend(weekly, "周线") if weekly is not None and len(weekly) >= 30 else {"direction": "unknown", "strength": "weak"},
+            "monthly": an.analyze_trend(monthly, "月线") if monthly is not None and len(monthly) >= 30 else {"direction": "unknown", "strength": "weak"},
+        }
+        tech = an.calc_indicators(daily)
+        fund = an.analyze_fund_flow(ff) if ff is not None and len(ff) else None
+        fundamentals = an.analyze_fundamentals(fin) if fin is not None and len(fin) else None
+        return an.generate_conclusion(trends, tech, fund, fundamentals, None).get("rating", "中性")
+    except Exception:
+        return "中性"
+
+
 def _scan_one(it):
     """机会双通道:
     通道A 超跌反弹(抄底): 60日回撤≥20% + 看涨形态
@@ -112,6 +149,7 @@ def _scan_one(it):
                 "direction": direction, "strength": strength,
                 "dd60": round(dd60 * 100, 1),
                 "pats": [p[0] for p in pats],
+                "rating": _calc_rating(code, df),
             }
 
         # ============ 通道B: 趋势机会(追涨) ============
@@ -144,6 +182,7 @@ def _scan_one(it):
             "resonance": reso,
             "direction": direction, "strength": strength,
             "pats": [p[0] for p in pats],
+            "rating": _calc_rating(code, df),
         }
     except Exception:
         return None

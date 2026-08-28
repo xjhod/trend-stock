@@ -316,10 +316,19 @@ def api_stock(code):
 
     # 该股是否被"今日机会"推荐（买入视角）—— 被推荐的股票不应显示"规避"
     in_scan = None
+    scan_detail = None
     try:
         for _s in scan_daily.load_signals().get("signals", []):
             if _s.get("code") == code:
                 in_scan = _s.get("type", "trend")
+                scan_detail = {
+                    "type": in_scan,
+                    "level": _s.get("level", 1),
+                    "pats": _s.get("pats", []),
+                    "tags": _s.get("tags", []),
+                    "dd60": _s.get("dd60"),
+                    "rating": _s.get("rating", ""),
+                }
                 break
     except Exception:
         pass
@@ -331,6 +340,7 @@ def api_stock(code):
         "ok": True,
         "code": code,
         "in_scan": in_scan,
+        "scan_detail": scan_detail,
         "position": pos_info,
         "quote": quote,
         "trends": trends,

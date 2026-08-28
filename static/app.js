@@ -422,6 +422,11 @@
     } else if (bearP.length) {
       const desc = bearP.slice(0, 3).map(function (n) { return n + "（" + (PAT_MEAN[n] || "") + "）"; }).join("、");
       lines.push("【形态】近期出现看跌参考信号 " + desc + "（看跌形态命中率偏低，仅供参考）。" + adaptWarn);
+    } else if (d.scan_detail && d.scan_detail.pats && d.scan_detail.pats.length) {
+      // 统一口径：今日机会识别出的形态（机会检测不要求趋势方向）
+      const desc = d.scan_detail.pats.slice(0, 3).map(function (n) { return n + "（" + (PAT_MEAN[n] || "") + "）"; }).join("、");
+      const it = d.scan_detail.type === "rebound" ? "超跌反弹·抄底信号" : "趋势机会信号";
+      lines.push("【形态】今日机会识别出 " + desc + "（" + it + "，机会检测不要求趋势方向）。" + adaptWarn);
     } else {
       lines.push("【形态】近30日无确认形态。" + adaptWarn);
     }
@@ -466,7 +471,13 @@
     let ratingLine = "【倾向】综合价格趋势、资金与基本面，当前评级 <strong>" + (c.rating || "中性") + "</strong>。";
     if (d.in_scan) {
       const it = d.in_scan === "rebound" ? "超跌反弹·抄底" : "趋势机会";
-      ratingLine = "【倾向】评级 <strong>" + (c.rating || "中性") + "</strong>，<strong>今日已列为" + it + "机会</strong>（买入视角）。" + (d.in_scan === "rebound" ? "属跌深后的反弹机会，注意按中线持有。" : "");
+      const sd = d.scan_detail || {};
+      const star = ({ 1: "★", 2: "★★", 3: "★★★" })[sd.level] || "";
+      let ratHint = "";
+      if (d.in_scan === "rebound") {
+        ratHint = (c.rating && c.rating !== "偏多") ? "（当前评级" + c.rating + "，超跌反弹属博弈买点、趋势未确认，注意控制仓位）" : "（超跌反弹博弈机会）";
+      }
+      ratingLine = "【倾向】评级 <strong>" + (c.rating || "中性") + "</strong>，今日已列为<strong>" + it + "机会</strong>" + star + "（买入视角）。" + ratHint;
     } else if (ex6.state === "stop" || ex6.state === "exit_signal") {
       ratingLine = "【倾向】当前评级 <strong>" + (c.rating || "中性") + "</strong>，但持仓已处于<strong>" + (ex6.label || "离场") + "</strong>状态（" + (ex6.desc || "") + "），<strong>以离场信号为准，暂不宜新买入</strong>。";
     }
@@ -1404,6 +1415,7 @@
       const sigs = d.signals || [];
       const st = d.status || {};
       if (infoEl) infoEl.textContent = (d.date ? d.date + " · " : "") + "机会 " + sigs.length + " 只" +
+        " · ★=信号强度（抄底最高2★、趋势3★）" +
         (st.running ? " · 扫描中..." : (st.msg ? " · " + st.msg : ""));
       if (!sigs.length) {
         listEl.innerHTML = '<div class="scan-empty">暂无符合条件的信号<br><span>大盘/行业震荡或未放量时规则不触发属正常。<br>点"▶ 扫描"可立即重跑。</span></div>';
@@ -1413,10 +1425,14 @@
       function itemHtml(it) {
         const isR = it.type === "rebound";
         const col = it.level >= 2 ? "var(--accent)" : "var(--text-dim)";
+        const rat = it.rating || "";
+        const ratCls = (rat === "偏多" || rat === "谨慎偏多") ? "up" : (rat === "偏空" || rat === "谨慎偏空") ? "down" : "flat";
+        const ratHtml = rat ? '<span class="scan-rat ' + ratCls + '" title="综合评级">' + rat + '</span>' : '';
         return '<div class="scan-item" data-code="' + it.code + '" title="点击查看图形">' +
           '<div class="scan-item-head"><span class="scan-type ' + (isR ? "reb" : "trd") + '">' + (isR ? "抄底" : "趋势") + '</span>' +
           '<span class="scan-name">' + it.name + ' <em>' + it.code + '</em></span>' +
           '<span class="scan-level" style="color:' + col + '">' + (stars[it.level] || "★") + '</span></div>' +
+          '<div class="scan-item-sub">' + ratHtml + ' ' + (it.ind || "") + " · " + it.price + " " + (it.change_pct >= 0 ? "+" : "") + it.change_pct + '%</div>' +
           '<div class="scan-item-sub">' + (it.ind || "") + " · " + it.price + " " + (it.change_pct >= 0 ? "+" : "") + it.change_pct + '%</div>' +
           '<div class="scan-tags">' + (it.tags || []).map(function (t) { return "<span>" + t + "</span>"; }).join("") + '</div>' +
           '</div>';
