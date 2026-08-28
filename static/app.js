@@ -960,20 +960,24 @@
       return;
     }
     const dates = rows.map(r => r.date);
-    const vals = rows.map(r => r.main_net);
+    // 主力净流入单位: 元 -> 亿
+    const vals = rows.map(r => (r.main_net == null ? 0 : +(r.main_net / 1e8).toFixed(2)));
     charts.fund.setOption({
       backgroundColor: "transparent", animation: false,
       tooltip: {
         trigger: "axis",
         formatter: p => {
           const i = p[0].dataIndex;
-          return dates[i] + "<br/>主力净流入：" + fmt(vals[i]) + " 亿<br/>净占比：" + fmt(rows[i].main_pct) + "%";
+          const v = vals[i];
+          return dates[i] + "<br/>主力净流入：" + (v >= 0 ? "+" : "") + v.toFixed(2) + " 亿<br/>净占比：" + fmt(rows[i].main_pct) + "%";
         },
         backgroundColor: "#1c2230", borderColor: "#2d333b", textStyle: { color: "#e6edf3", fontSize: 12 }
       },
-      grid: { left: 60, right: 20, top: 16, bottom: 24 },
+      grid: { left: 66, right: 20, top: 16, bottom: 24 },
       xAxis: { type: "category", data: dates, axisLine: { lineStyle: { color: "#2d333b" } }, axisLabel: { color: "#8b949e", fontSize: 10 } },
-      yAxis: { splitLine: { lineStyle: { color: "#1c2230" } }, axisLabel: { color: "#8b949e", fontSize: 11, formatter: "{value}亿" } },
+      yAxis: { splitLine: { lineStyle: { color: "#1c2230" } },
+        axisLabel: { color: "#8b949e", fontSize: 11,
+          formatter: function (v) { return (v > 0 ? "+" : "") + v.toFixed(1) + "亿"; } } },
       series: [{
         type: "bar", data: vals,
         itemStyle: { color: p => (vals[p.dataIndex] >= 0 ? "#e5484d" : "#30a46c") },

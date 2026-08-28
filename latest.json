@@ -1,5 +1,5 @@
 {
-  "version": "1.3.5",
-  "note": "修复：被今日机会推荐的股票不再显示'规避'评级（推荐买入与规避互斥），并标注机会类型（抄底/趋势）",
+  "version": "1.3.6",
+  "note": "修复：主力资金图纵轴单位显示乱码，已换算为亿元并修正刻度；新增净流入/净流出图例说明",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
