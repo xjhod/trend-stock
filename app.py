@@ -313,9 +313,20 @@ def api_stock(code):
         {"holding": False, "state": "no_position", "desc": "数据不足", "entry": None})
     layer_info["exit"] = exit_info
 
+    # 该股是否被"今日机会"推荐（买入视角）—— 被推荐的股票不应显示"规避"
+    in_scan = None
+    try:
+        for _s in scan_daily.load_signals().get("signals", []):
+            if _s.get("code") == code:
+                in_scan = _s.get("type", "trend")
+                break
+    except Exception:
+        pass
+
     return jsonify({
         "ok": True,
         "code": code,
+        "in_scan": in_scan,
         "quote": quote,
         "trends": trends,
         "tech": tech,

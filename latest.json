@@ -1,5 +1,5 @@
 {
-  "version": "1.3.4",
-  "note": "新增模拟持仓跟踪：今日机会虚拟买入，每日自动跟踪+离场决策，20交易日结算实验",
+  "version": "1.3.5",
+  "note": "修复：被今日机会推荐的股票不再显示'规避'评级（推荐买入与规避互斥），并标注机会类型（抄底/趋势）",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

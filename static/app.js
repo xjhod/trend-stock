@@ -351,7 +351,8 @@
     const el = document.getElementById("conclusion");
     const c = d.conclusion || {};
     const ex = (d.layers && d.layers.exit) || {};
-    const isExit = ex.state === "stop" || ex.state === "exit_signal";
+    // 被今日机会推荐买入的股票不显示"规避"（买入推荐与规避互斥）
+    const isExit = !d.in_scan && (ex.state === "stop" || ex.state === "exit_signal");
     const base = c.rating === "偏多" ? "偏多" :
       c.rating === "谨慎偏多" ? "谨慎偏多" :
       c.rating === "偏空" ? "偏空" :
@@ -470,7 +471,10 @@
     const c = d.conclusion || {};
     const ex6 = (d.layers && d.layers.exit) || {};
     let ratingLine = "【倾向】综合价格趋势、资金与基本面，当前评级 <strong>" + (c.rating || "中性") + "</strong>。";
-    if (ex6.state === "stop" || ex6.state === "exit_signal") {
+    if (d.in_scan) {
+      const it = d.in_scan === "rebound" ? "超跌反弹·抄底" : "趋势机会";
+      ratingLine = "【倾向】评级 <strong>" + (c.rating || "中性") + "</strong>，<strong>今日已列为" + it + "机会</strong>（买入视角）。" + (d.in_scan === "rebound" ? "属跌深后的反弹机会，注意按中线持有。" : "");
+    } else if (ex6.state === "stop" || ex6.state === "exit_signal") {
       ratingLine = "【倾向】当前评级 <strong>" + (c.rating || "中性") + "</strong>，但持仓已处于<strong>" + (ex6.label || "离场") + "</strong>状态（" + (ex6.desc || "") + "），<strong>以离场信号为准，暂不宜新买入</strong>。";
     }
     lines.push(ratingLine);
