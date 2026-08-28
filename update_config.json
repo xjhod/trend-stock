@@ -1,0 +1,10 @@
+{
+  "owner": "xjhod",
+  "repo": "trend-stock",
+  "branch": "main",
+  "sources": [
+    {"name": "GitHub直连", "prefix": ""},
+    {"name": "ghfast加速", "prefix": "https://ghfast.top/"},
+    {"name": "ghproxy加速", "prefix": "https://gh-proxy.com/"}
+  ]
+}

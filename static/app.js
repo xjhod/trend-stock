@@ -1553,7 +1553,7 @@
   }
   function checkUpdate(silent) {
     document.getElementById("upd-cur").textContent = "检查中…";
-    fetchTimeout("/api/update/check", {}, 15000).then(function (r) { return r.json(); }).then(function (d) {
+    fetchTimeout("/api/update/check", {}, 40000).then(function (r) { return r.json(); }).then(function (d) {
       const curEl = document.getElementById("upd-cur");
       if (d && d.ok) {
         curEl.textContent = d.current || "-";

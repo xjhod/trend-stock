@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""在线更新模块：从 GitHub 更新源检查新版本 -> 下载 -> 校验 -> 替换代码文件。
-
+"""在线更新模块：从多个更新源（GitHub 直连 + 国内加速代理）检查新版本 -> 下载 -> 校验 -> 替换代码文件。
 安全设计：
 - 只更新「代码文件」（.py/.html/.js/.css/.txt/.md/.bat/.sh 及 VERSION）
 - 用户数据文件（watchlist.json / daily_signals.json / highfit_pool.json /
   config.json / update_config.json / bt_data / research 缓存）一律保留
 - 解压时做路径穿越防护（拒绝 .. 与绝对路径）
+- 多源回退：raw.githubusercontent 直连不通时，自动尝试 ghfast.top / gh-proxy.com 等国内加速源
 """
 import io
 import json
@@ -13,13 +13,22 @@ import os
 import re
 import shutil
 import zipfile
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
 CONFIG_FILE = os.path.join(BASE_DIR, "update_config.json")
 
-# 更新源模板（发布到 GitHub 后填写自己的仓库地址）
-DEFAULT_CONFIG = {"update_url": ""}
+# 默认更新源（发布后对应自己的仓库）
+DEFAULT_CONFIG = {
+    "owner": "xjhod",
+    "repo": "trend-stock",
+    "branch": "main",
+    "sources": [
+        {"name": "GitHub直连", "prefix": ""},
+        {"name": "ghfast加速", "prefix": "https://ghfast.top/"},
+        {"name": "ghproxy加速", "prefix": "https://gh-proxy.com/"},
+        {"name": "ghproxy.net加速", "prefix": "https://ghproxy.net/"},
+    ],
+}
 
 # 用户数据文件：绝不更新
 DATA_FILES = {
@@ -42,9 +51,19 @@ def load_config():
     try:
         with open(CONFIG_FILE, encoding="utf-8") as f:
             cfg = json.load(f)
-        return {"update_url": str(cfg.get("update_url", "")).strip()}
     except Exception:
-        return dict(DEFAULT_CONFIG)
+        cfg = {}
+    owner = str(cfg.get("owner") or DEFAULT_CONFIG["owner"]).strip()
+    repo = str(cfg.get("repo") or DEFAULT_CONFIG["repo"]).strip()
+    branch = str(cfg.get("branch") or DEFAULT_CONFIG["branch"]).strip()
+    sources = cfg.get("sources") or DEFAULT_CONFIG["sources"]
+    parsed = []
+    for s in sources:
+        if isinstance(s, dict):
+            parsed.append({"name": str(s.get("name", "源")), "prefix": str(s.get("prefix", "")).strip()})
+        else:
+            parsed.append({"name": "源", "prefix": str(s).strip()})
+    return {"owner": owner, "repo": repo, "branch": branch, "sources": parsed}
 
 
 def save_config(cfg):
@@ -56,6 +75,14 @@ def _ver_tuple(v):
     """'1.3.0' -> (1,3,0)，比较版本大小"""
     parts = re.findall(r"\d+", str(v))
     return tuple(int(x) for x in parts[:3]) or (0,)
+
+
+def _raw_url(cfg, kind):
+    """kind: 'latest' -> raw latest.json; 'zip' -> github zip 下载地址"""
+    o, r, b = cfg["owner"], cfg["repo"], cfg["branch"]
+    if kind == "latest":
+        return f"https://raw.githubusercontent.com/{o}/{r}/{b}/latest.json"
+    return f"https://github.com/{o}/{r}/archive/refs/heads/{b}.zip"
 
 
 def _should_update(rel):
@@ -86,75 +113,101 @@ def _zip_root(names):
 
 
 def check_update():
-    """请求更新源上的 latest.json，返回版本对比结果"""
+    """多源回退：逐个尝试各更新源，返回版本对比结果"""
+    import requests
     cfg = load_config()
-    url = cfg.get("update_url", "").strip()
-    if not url:
-        return {"ok": False, "msg": "未配置更新源。请在 update_config.json 里填写 GitHub 仓库的 latest.json 地址。"}
-    try:
-        import requests
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        meta = r.json()
-        cur = current_version()
-        latest = str(meta.get("version", "")).strip()
-        has_update = bool(latest) and _ver_tuple(latest) > _ver_tuple(cur)
-        return {
-            "ok": True,
-            "has_update": has_update,
-            "current": cur,
-            "latest": latest,
-            "note": meta.get("note", ""),
-            "download": meta.get("download", ""),
-        }
-    except Exception as e:
-        return {"ok": False, "msg": f"检查更新失败：{e}"}
+    raw_latest = _raw_url(cfg, "latest")
+    raw_zip = _raw_url(cfg, "zip")
+    last_err = None
+    tried = []
+    for s in cfg["sources"]:
+        url = s["prefix"] + raw_latest
+        tried.append(s["name"])
+        try:
+            r = requests.get(url, timeout=8)
+            r.raise_for_status()
+            meta = r.json()
+            cur = current_version()
+            latest = str(meta.get("version", "")).strip()
+            has_update = bool(latest) and _ver_tuple(latest) > _ver_tuple(cur)
+            # 下载地址：原 latest.json 的 download（github 直链）若走代理则加前缀
+            dl = str(meta.get("download", "") or "").strip() or raw_zip
+            if s["prefix"] and dl.startswith("http"):
+                dl = s["prefix"] + dl
+            return {
+                "ok": True,
+                "has_update": has_update,
+                "current": cur,
+                "latest": latest,
+                "note": meta.get("note", ""),
+                "download": dl,
+                "source": s["name"],
+            }
+        except Exception as e:
+            last_err = e
+            continue
+    return {"ok": False, "msg": f"检查更新失败（已尝试 {len(tried)} 个源：{'、'.join(tried)}）：{last_err}"}
 
 
 def apply_update(download_url):
-    """下载更新包 -> 校验 -> 只替换代码文件。返回 (ok, msg, replaced)"""
-    if not download_url:
+    """多源回退下载更新包 -> 校验 -> 只替换代码文件。返回 (ok, msg, replaced)"""
+    import requests
+    cfg = load_config()
+    raw_zip = _raw_url(cfg, "zip")
+    # 候选下载地址：优先传入的 download_url，再加各代理源拼的 zip 地址
+    candidates = []
+    if download_url:
+        candidates.append(download_url)
+    for s in cfg["sources"]:
+        if s["prefix"]:
+            candidates.append(s["prefix"] + raw_zip)
+    candidates = list(dict.fromkeys(candidates))  # 去重保序
+    if not candidates:
         return {"ok": False, "msg": "缺少下载地址"}
-    try:
-        import requests
-        r = requests.get(download_url, timeout=90)
-        r.raise_for_status()
-        data = r.content
-        if not data:
-            return {"ok": False, "msg": "下载内容为空"}
-
-        zf = zipfile.ZipFile(io.BytesIO(data))
-        bad = zf.testzip()
-        if bad:
-            return {"ok": False, "msg": f"更新包损坏：{bad}"}
-        names = zf.namelist()
-        root = _zip_root(names)
-        replaced = []
-        skipped = []
-        for name in names:
-            if name.endswith("/"):
+    last_err = None
+    for url in candidates:
+        try:
+            r = requests.get(url, timeout=90)
+            r.raise_for_status()
+            data = r.content
+            if not data:
+                last_err = "下载内容为空"
                 continue
-            # 路径穿越防护：拒绝任何含 .. 路径段的原始路径
-            if any(seg == ".." for seg in name.replace("\\", "/").split("/")):
-                skipped.append(name)
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(data))
+            except zipfile.BadZipFile:
+                last_err = "下载内容不是有效的zip"
                 continue
-            if root:
-                rel = os.path.relpath(name, root)
-            else:
-                rel = name
-            rel = rel.replace("\\", "/")
-            if rel.startswith("..") or os.path.isabs(rel):
-                skipped.append(rel)
-                continue  # 二次防护
-            if not _should_update(rel):
+            bad = zf.testzip()
+            if bad:
+                last_err = f"更新包损坏：{bad}"
                 continue
-            target = os.path.join(BASE_DIR, rel)
-            parent = os.path.dirname(target)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with zf.open(name) as src, open(target, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-            replaced.append(rel)
-        return {"ok": True, "msg": f"更新完成，已更新 {len(replaced)} 个文件", "replaced": replaced}
-    except Exception as e:
-        return {"ok": False, "msg": f"更新失败：{e}"}
+            names = zf.namelist()
+            root = _zip_root(names)
+            replaced = []
+            skipped = []
+            for name in names:
+                if name.endswith("/"):
+                    continue
+                if any(seg == ".." for seg in name.replace("\\", "/").split("/")):
+                    skipped.append(name)
+                    continue
+                rel = os.path.relpath(name, root) if root else name
+                rel = rel.replace("\\", "/")
+                if rel.startswith("..") or os.path.isabs(rel):
+                    skipped.append(rel)
+                    continue
+                if not _should_update(rel):
+                    continue
+                target = os.path.join(BASE_DIR, rel)
+                parent = os.path.dirname(target)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+                with zf.open(name) as src, open(target, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                replaced.append(rel)
+            return {"ok": True, "msg": f"更新完成，已更新 {len(replaced)} 个文件", "replaced": replaced}
+        except Exception as e:
+            last_err = e
+            continue
+    return {"ok": False, "msg": f"更新失败（{len(candidates)}个源均不可用）：{last_err}"}
