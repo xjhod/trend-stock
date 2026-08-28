@@ -75,6 +75,10 @@ def _scan_one(it):
         # 硬否决：下降趋势的股票绝不列为机会（形态在下跌趋势中无效）
         if direction == "down":
             return None
+        # 硬否决：处于"止损/双确认离场"的股票不进机会（买入推荐与卖出建议互斥）
+        _exit = layers.analyze_exit(code, df)
+        if _exit.get("holding") and _exit.get("state") in ("stop", "exit_signal"):
+            return None
         ly = layers.analyze_layers(code, df)
         # 共振看涨：大盘↑ + 行业↑ + 个股严格趋势↑
         reso = (ly["market"]["direction"] == "up" and

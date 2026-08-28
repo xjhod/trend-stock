@@ -350,11 +350,17 @@
   function renderConclusion(d) {
     const el = document.getElementById("conclusion");
     const c = d.conclusion || {};
-    const ratingText = c.rating === "偏多" ? "偏多" :
+    const ex = (d.layers && d.layers.exit) || {};
+    const isExit = ex.state === "stop" || ex.state === "exit_signal";
+    const base = c.rating === "偏多" ? "偏多" :
       c.rating === "谨慎偏多" ? "谨慎偏多" :
       c.rating === "偏空" ? "偏空" :
       c.rating === "谨慎偏空" ? "谨慎偏空" : "中性";
-    el.innerHTML = '<div class="c-rating">' + ratingText + '</div><div class="c-text">' + (c.sentence || "--") + '</div>';
+    const ratingText = isExit ? "规避" : base;
+    const cls = isExit ? "c-rating neg" : "c-rating";
+    let text = c.sentence || "--";
+    if (isExit) text = "持仓处于" + (ex.label || "离场") + "状态，建议以离场信号为准，暂不宜新买入。" + text;
+    el.innerHTML = '<div class="' + cls + '">' + ratingText + '</div><div class="c-text">' + text + '</div>';
   }
 
   // 技术面综合解读：根据蜡烛图/支撑阻力/量价理论生成一段文字总结
@@ -462,7 +468,12 @@
     lines.push("【指标】MACD " + macdSt + "，RSI(14) " + rsiV + "（" + rsiSt + "）。");
     // 6 综合倾向
     const c = d.conclusion || {};
-    lines.push("【倾向】综合价格趋势、资金与基本面，当前评级 <strong>" + (c.rating || "中性") + "</strong>。");
+    const ex6 = (d.layers && d.layers.exit) || {};
+    let ratingLine = "【倾向】综合价格趋势、资金与基本面，当前评级 <strong>" + (c.rating || "中性") + "</strong>。";
+    if (ex6.state === "stop" || ex6.state === "exit_signal") {
+      ratingLine = "【倾向】当前评级 <strong>" + (c.rating || "中性") + "</strong>，但持仓已处于<strong>" + (ex6.label || "离场") + "</strong>状态（" + (ex6.desc || "") + "），<strong>以离场信号为准，暂不宜新买入</strong>。";
+    }
+    lines.push(ratingLine);
     el.innerHTML = lines.map(function (l) { return '<div class="ts-line">' + l + '</div>'; }).join("");
   }
 

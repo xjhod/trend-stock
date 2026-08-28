@@ -338,6 +338,9 @@ body {
   font-size:20px; font-weight:800; padding:6px 18px; border-radius:8px;
   background:var(--accent); color:#1a1a1a; white-space:nowrap;
 }
+.conclusion .c-rating.neg {
+  background:rgba(229,72,77,.85); color:#fff;
+}
 .conclusion .c-text { font-size:15px; line-height:1.6; }
 
 /* 滚动条 */

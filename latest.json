@@ -1,5 +1,5 @@
 {
-  "version": "1.3.1",
-  "note": "修复：机会列表与单股页趋势口径统一，剔除下降趋势股票（如中兴通讯误列问题）",
+  "version": "1.3.2",
+  "note": "修复：机会列表与离场信号互斥，止损/离场状态的股票不再列为机会；倾向评级联动（离场时显示规避）",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
