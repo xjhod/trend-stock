@@ -1350,25 +1350,32 @@
       box.appendChild(div);
     });
   }
-  // Tab 切换（自选股 / 高适配 / 今日机会）
+  // Tab 切换（自选股 / 高适配 / 今日机会 / 模拟持仓）
   const tabWatch = document.getElementById("tab-watch");
   const tabHigh = document.getElementById("tab-highfit");
   const tabScan = document.getElementById("tab-scan");
+  const tabPaper = document.getElementById("tab-paper");
   function switchTab(name) {
     const isWatch = name === "watch";
+    const isHigh = name === "highfit";
     const isScan = name === "scan";
+    const isPaper = name === "paper";
     tabWatch.classList.toggle("active", isWatch);
-    tabHigh.classList.toggle("active", !isWatch && !isScan);
+    tabHigh.classList.toggle("active", isHigh);
     tabScan.classList.toggle("active", isScan);
+    if (tabPaper) tabPaper.classList.toggle("active", isPaper);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
-    document.getElementById("panel-highfit").style.display = (!isWatch && !isScan) ? "" : "none";
+    document.getElementById("panel-highfit").style.display = isHigh ? "" : "none";
     document.getElementById("panel-scan").style.display = isScan ? "" : "none";
-    if (!isWatch && !isScan && !hfData) loadHighfit();
+    if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
+    if (isHigh && !hfData) loadHighfit();
     if (isScan) renderScanList();
+    if (isPaper) renderPaper();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
   tabHigh.addEventListener("click", function () { switchTab("highfit"); });
   tabScan.addEventListener("click", function () { switchTab("scan"); });
+  if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   document.getElementById("hf-refresh").addEventListener("click", function () { loadHighfit(); });
   document.getElementById("scan-run").addEventListener("click", function () {
     const infoEl = document.getElementById("scan-info");
@@ -1418,6 +1425,57 @@
       });
     }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
   }
+
+  // ---------- 模拟持仓 ----------
+  function renderPaper() {
+    const listEl = document.getElementById("paper-list");
+    const sumEl = document.getElementById("paper-summary");
+    const infoEl = document.getElementById("paper-info");
+    if (!listEl) return;
+    fetch("/api/paper").then(r => r.json()).then(function (d) {
+      const sum = d.summary || {};
+      const hold = d.holdings || [];
+      const closed = d.closed || [];
+      if (infoEl) infoEl.textContent = "持仓 " + sum.holding + " · 已卖 " + sum.closed + " · 胜率 " + (sum.wins || 0) + "胜";
+      if (sumEl) {
+        sumEl.innerHTML =
+          '<div class="paper-s-card"><b>' + (sum.total || 0) + '</b><span>总票数</span></div>' +
+          '<div class="paper-s-card"><b>' + (sum.holding || 0) + '</b><span>持仓中</span></div>' +
+          '<div class="paper-s-card"><b>' + (sum.closed || 0) + '</b><span>已卖出</span></div>' +
+          '<div class="paper-s-card ' + (sum.realized_ret_pct < 0 ? "neg" : "pos") + '"><b>' + (sum.realized_ret_pct == null ? "0" : sum.realized_ret_pct) + '%</b><span>已实现收益</span></div>';
+      }
+      function rowHtml(h) {
+        const cur = h.cur_price || h.entry_price || 0;
+        const ret = h.entry_price ? (cur / h.entry_price - 1) * 100 : 0;
+        const isR = h.type === "rebound";
+        const c = ret >= 0 ? "pos" : "neg";
+        const stText = h.status === "holding" ? "持有" : (h.reason || "已离场");
+        return '<div class="scan-item" data-code="' + h.code + '" title="点击查看图形">' +
+          '<div class="scan-item-head"><span class="scan-type ' + (isR ? "reb" : "trd") + '">' + (isR ? "抄底" : "趋势") + '</span>' +
+          '<span class="scan-name">' + h.name + ' <em>' + h.code + '</em></span>' +
+          '<span class="scan-level ' + c + '">' + (ret >= 0 ? "+" : "") + ret.toFixed(1) + '%</span></div>' +
+          '<div class="scan-item-sub">成本 ' + h.entry_price + ' · 现 ' + cur + ' · 第' + (h.days || 0) + '日 · ' + stText + '</div>' +
+          '<div class="scan-tags">' + (h.tags || []).map(function (t) { return "<span>" + t + "</span>"; }).join("") + '</div>' +
+          '</div>';
+      }
+      const holdingHtml = hold.map(rowHtml).join("");
+      const closedHtml = closed.map(rowHtml).join("");
+      listEl.innerHTML = (hold.length ? '<div class="scan-group-title">持仓中（' + hold.length + '）</div>' + holdingHtml : "") +
+        (closed.length ? '<div class="scan-group-title">已卖出（' + closed.length + '）</div>' + closedHtml : "") ||
+        '<div class="scan-empty">暂无模拟持仓<br>可在「今日机会」扫描后使用重新建仓</div>';
+      listEl.querySelectorAll(".scan-item").forEach(function (el) {
+        el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
+      });
+    }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
+  }
+  document.getElementById("paper-refresh").addEventListener("click", function () {
+    const infoEl = document.getElementById("paper-info");
+    if (infoEl) infoEl.textContent = "更新中…";
+    fetch("/api/paper/refresh", { method: "POST" }).then(r => r.json()).then(function (d) {
+      if (infoEl) infoEl.textContent = "已更新 · 今日离场 " + ((d.closed_today || []).length) + " 只";
+      renderPaper();
+    }).catch(function () { if (infoEl) infoEl.textContent = "更新失败"; });
+  });
 
   // ---------- 推送设置弹窗 ----------
   function cfgVal(id) {

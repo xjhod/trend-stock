@@ -28,6 +28,7 @@
         <button class="s-tab active" id="tab-watch" title="手动添加的自选股">自选股</button>
         <button class="s-tab" id="tab-highfit" title="市值≥1000亿的高适配机构白马，按行业分类">高适配</button>
         <button class="s-tab" id="tab-scan" title="每日收盘后自动扫描高适配池，出现机会的股票">今日机会</button>
+        <button class="s-tab" id="tab-paper" title="今日机会虚拟买入，每日跟踪，按规则决定卖出（20日实验）">模拟持仓</button>
       </div>
       <div id="panel-watch">
         <div class="add-box">
@@ -48,6 +49,15 @@
           <button class="hf-refresh" id="scan-run" title="立即扫描高适配池">▶ 扫描</button>
         </div>
         <div class="scan-list" id="scan-list"></div>
+      </div>
+      <div id="panel-paper" style="display:none">
+        <div class="hf-toolbar">
+          <span id="paper-info">模拟持仓加载中…</span>
+          <button class="hf-refresh" id="paper-refresh" title="更新行情并执行离场规则">↻ 更新</button>
+        </div>
+        <div class="paper-summary" id="paper-summary"></div>
+        <div class="paper-note">今日机会82只已于 2026-08-28 虚拟买入（每只10万）。每日「↻ 更新」后按规则给出离场建议，20个交易日后结算。</div>
+        <div class="scan-list" id="paper-list"></div>
       </div>
       <div class="sidebar-foot">点击股票查看趋势全景</div>
     </aside>

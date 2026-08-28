@@ -1,5 +1,5 @@
 {
-  "version": "1.3.3",
-  "note": "新增超跌反弹机会通道（回测实证：回撤≥20%+看涨形态，大盘弱时胜率58%；放量不增分）。机会列表分'抄底/趋势'两组",
+  "version": "1.3.4",
+  "note": "新增模拟持仓跟踪：今日机会虚拟买入，每日自动跟踪+离场决策，20交易日结算实验",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

@@ -16,6 +16,7 @@ import layers
 import scan_daily
 import notify
 import updater
+import paper_trade
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
@@ -422,6 +423,31 @@ def api_update_apply():
     data = request.get_json(force=True) or {}
     url = data.get("download", "")
     return jsonify(updater.apply_update(url))
+
+
+# ---------------- 模拟持仓 ----------------
+@app.route("/api/paper", methods=["GET"])
+def api_paper():
+    """模拟持仓状态（含今日刷新）"""
+    return jsonify(paper_trade.status())
+
+
+@app.route("/api/paper/import", methods=["POST"])
+def api_paper_import():
+    """从今日机会创建模拟持仓（覆盖重建）"""
+    entry_date = (request.get_json(silent=True) or {}).get("entry_date")
+    sigs = scan_daily.load_signals().get("signals", [])
+    if not sigs:
+        return jsonify({"ok": False, "msg": "今日机会为空"})
+    d = paper_trade.create_from_signals(sigs, entry_date)
+    return jsonify({"ok": True, "holdings": len(d["holdings"]), "capital": d["capital"]})
+
+
+@app.route("/api/paper/refresh", methods=["POST"])
+def api_paper_refresh():
+    """手动刷新一次: 更新行情 + 执行离场规则"""
+    r = paper_trade.refresh()
+    return jsonify(r)
 
 
 @app.route("/")

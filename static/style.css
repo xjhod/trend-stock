@@ -348,6 +348,17 @@ body {
 ::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 ::-webkit-scrollbar-track { background:transparent; }
 
+/* 模拟持仓 */
+.paper-summary { display:flex; gap:8px; padding:8px 6px 2px; flex-wrap:wrap; }
+.paper-s-card { flex:1; min-width:74px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
+.paper-s-card b { display:block; font-size:16px; color:var(--text); }
+.paper-s-card span { font-size:10px; color:var(--text-dim); }
+.paper-s-card.pos b { color:#34c77b; }
+.paper-s-card.neg b { color:#ff6b6b; }
+.paper-note { font-size:11px; color:var(--text-dim); padding:6px 6px 0; line-height:1.5; }
+.scan-level.pos { color:#34c77b; }
+.scan-level.neg { color:#ff6b6b; }
+
 /* 机会列表分组 */
 .scan-group-title { font-size:12px; color:var(--text-dim); padding:9px 6px 4px; font-weight:700; border-top:1px solid var(--border); margin-top:4px; letter-spacing:.5px; }
 .scan-group-title:first-child { border-top:none; margin-top:0; }
