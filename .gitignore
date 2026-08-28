@@ -1,0 +1,17 @@
+# 用户数据（不推仓库、更新时也保留）
+watchlist.json
+daily_signals.json
+highfit_pool.json
+update_config.json
+config.json
+
+# 缓存与日志
+__pycache__/
+*.pyc
+*.log
+server.log
+bt_data/
+research/*.json
+
+# 打包产物
+*.zip

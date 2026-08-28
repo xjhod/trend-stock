@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>趋势全景 · 股票分析</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+
+<div class="app">
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="logo">趋势<span class="logo-accent">全景</span></div>
+    <div class="topbar-sub">A股 · 一屏看全价格与基本面趋势</div>
+    <button class="rules-btn" onclick="window.__openRules()" title="所有规则与使用顺序">规则手册</button>
+    <button class="rules-btn" onclick="window.__openConfig()" title="微信/短信推送配置与每日自动扫描">推送设置</button>
+    <button class="rules-btn" onclick="window.__checkUpdate()" title="检查 GitHub 上的新版本并一键更新">检查更新</button>
+    <div class="topbar-right" id="market-status"></div>
+  </header>
+
+  <!-- 主体 -->
+  <div class="main">
+    <!-- 左侧：自选股 -->
+    <aside class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="s-tab active" id="tab-watch" title="手动添加的自选股">自选股</button>
+        <button class="s-tab" id="tab-highfit" title="市值≥1000亿的高适配机构白马，按行业分类">高适配</button>
+        <button class="s-tab" id="tab-scan" title="每日收盘后自动扫描高适配池，出现机会的股票">今日机会</button>
+      </div>
+      <div id="panel-watch">
+        <div class="add-box">
+          <input type="text" id="add-input" placeholder="输入代码或名称，如 600519 / 茅台" maxlength="20">
+          <button id="add-btn" title="添加自选">＋</button>
+        </div>
+        <button class="import-btn" id="import-btn" title="从同花顺导出的自选股文本批量导入">⇪ 导入自选股</button>
+        <div class="search-result" id="search-result"></div>
+        <ul class="watchlist" id="watchlist"></ul>
+      </div>
+      <div id="panel-highfit" style="display:none">
+        <div class="hf-toolbar"><span id="hf-count">高适配池加载中…</span><button class="hf-refresh" id="hf-refresh" title="刷新行情">↻</button></div>
+        <div class="hf-list" id="hf-list"></div>
+      </div>
+      <div id="panel-scan" style="display:none">
+        <div class="hf-toolbar">
+          <span id="scan-info">今日机会加载中…</span>
+          <button class="hf-refresh" id="scan-run" title="立即扫描高适配池">▶ 扫描</button>
+        </div>
+        <div class="scan-list" id="scan-list"></div>
+      </div>
+      <div class="sidebar-foot">点击股票查看趋势全景</div>
+    </aside>
+
+    <!-- 右侧：主内容 -->
+    <section class="content" id="content">
+      <!-- 未选择状态 -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">📈</div>
+        <div>从左侧选择一只自选股</div>
+        <div class="empty-sub">查看「一屏趋势全景」</div>
+      </div>
+
+      <!-- 股票详情（加载后显示） -->
+      <div class="stock-view" id="stock-view" style="display:none">
+        <!-- ① 股票信息栏 -->
+        <div class="quote-bar" id="quote-bar"></div>
+
+        <!-- ② 多周期趋势条 -->
+        <div class="trends-row" id="trends-row"></div>
+
+        <!-- ②.5 层级共振（大盘→行业→个股） -->
+        <div class="layers-row" id="layers-row"></div>
+
+        <!-- ③ 技术指标卡片 -->
+        <div class="tech-row" id="tech-row"></div>
+
+        <!-- ④ K线图 + 资金趋势 -->
+        <div class="chart-wrap">
+          <div class="chart-head">
+            <span class="chart-title">K线走势</span>
+            <span class="chart-note">▲高开缺口 ▼低开缺口 ◆形态信号</span>
+            <div class="chart-tools">
+              <span class="tools-label">核心信号:</span>
+              <span class="tools-fixed" title="判断核心，固定显示：趋势线 / 支撑·阻力 / 形态 / 跳空 / 背离">趋势线 · 支撑·阻力 · 形态 · 跳空 · 背离</span>
+              <span class="tools-sep"></span>
+              <span class="tools-label">辅助:</span>
+              <button type="button" class="ov-btn on" id="ov-ma" onclick="window.__toggleOverlay('ov-ma')">均线</button>
+              <button type="button" class="ov-btn on" id="ov-boll" onclick="window.__toggleOverlay('ov-boll')">布林带</button>
+              <button type="button" class="ov-btn" id="ov-fib" onclick="window.__toggleOverlay('ov-fib')">斐波那契</button>
+              <span class="tools-sep"></span>
+              <button type="button" class="ov-btn bt-btn" id="btn-backtest" title="用历史数据验证各信号命中率">信号回测</button>
+            </div>
+            <div class="period-tabs" id="period-tabs">
+              <button data-p="daily" class="active">日线</button>
+              <button data-p="weekly">周线</button>
+              <button data-p="monthly">月线</button>
+            </div>
+          </div>
+          <div id="kline-chart" class="kline-chart"></div>
+          <div class="fund-head">主力资金 · 近20日</div>
+          <div id="fund-chart" class="fund-chart"></div>
+        </div>
+
+        <!-- ⑤ 基本面趋势 -->
+        <div class="fundamentals-wrap">
+          <div class="chart-head">
+            <span class="chart-title">基本面趋势</span>
+            <span class="fund-desc" id="fund-desc"></span>
+          </div>
+          <div id="fundamental-chart" class="fundamental-chart"></div>
+        </div>
+
+        <!-- ⑥ 技术面综合解读 -->
+        <div class="tech-summary">
+          <div class="chart-head">
+            <span class="chart-title">技术面综合解读</span>
+            <span class="fund-desc">基于蜡烛图 / 支撑阻力 / 量价理论</span>
+          </div>
+          <div class="ts-text" id="tech-summary-text"></div>
+        </div>
+
+        <!-- ⑦ 综合结论 -->
+        <div class="conclusion" id="conclusion"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- 信号回测弹窗 -->
+<div class="modal-mask" id="bt-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">历史信号命中率回测 <span class="bt-sub" id="bt-sub"></span></div>
+    <div class="modal-desc">用最近约 4 年历史数据，在每个测试点用<strong>当时可见数据</strong>生成信号，再对照之后实际走势统计命中率。命中率越高，该信号越值得参考。</div>
+    <div id="bt-body" class="bt-body">加载中...</div>
+    <div class="bt-foot">
+      <button class="modal-btn primary" id="bt-refresh">重新回测</button>
+      <button class="modal-btn" onclick="window.__closeBt()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 在线更新弹窗 -->
+<div class="modal-mask" id="update-modal" style="display:none">
+  <div class="modal cfg-modal">
+    <div class="modal-title">在线更新 <span class="bt-sub">当前版本 <span id="upd-cur">-</span></span></div>
+    <div id="upd-body">
+      <div class="cfg-body" id="upd-result"></div>
+    </div>
+    <div class="bt-foot">
+      <button class="modal-btn primary" id="upd-go-btn" style="display:none">立即更新</button>
+      <button class="modal-btn" onclick="window.__closeUpdate()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 推送设置弹窗 -->
+<div class="modal-mask" id="cfg-modal" style="display:none">
+  <div class="modal cfg-modal">
+    <div class="modal-title">推送设置 <span class="bt-sub">每日扫描机会 · 微信/短信推送</span></div>
+    <div class="modal-desc">每日收盘后(15:35)自动扫描高适配池，出现机会时推送到微信。微信推送免费，只需填写下面任一个服务的 token 并扫码绑定即可收到消息。</div>
+    <div class="cfg-body">
+      <div class="cfg-sec">
+        <div class="cfg-title">每日扫描</div>
+        <div class="cfg-row"><span>自动扫描时间</span><input id="cfg-scan-time" value="15:35" style="width:90px" title="A股收盘后"></div>
+        <div class="cfg-row"><span>自动推送机会</span><select id="cfg-push-level"><option value="1">全部信号</option><option value="2" selected>仅强机会(共振/放量形态)</option></select></div>
+      </div>
+      <div class="cfg-sec">
+        <div class="cfg-title">微信推送（任选其一）</div>
+        <div class="cfg-row">
+          <span>启用微信推送</span>
+          <label class="sw"><input type="checkbox" id="cfg-wechat-on"><i></i></label>
+        </div>
+        <div class="cfg-row"><span>渠道</span>
+          <select id="cfg-provider">
+            <option value="serverchan">Server酱（sct.ftqq.com）</option>
+            <option value="pushplus">PushPlus（pushplus.plus）</option>
+          </select>
+        </div>
+        <div class="cfg-row"><span>SendKey / Token</span><input id="cfg-wechat-token" placeholder="粘贴 SendKey 或 PushPlus Token" style="width:340px"></div>
+        <div class="cfg-hint">① Server酱：浏览器打开 sct.ftqq.com → 微信扫码登录 → 复制 SendKey。<br>② PushPlus：打开 pushplus.plus → 微信扫码 → 复制 token。<br>两者都是免费，通过微信服务号推送到你的微信。</div>
+      </div>
+      <div class="cfg-sec">
+        <div class="cfg-title">短信推送（预留，需短信服务商密钥）</div>
+        <div class="cfg-row"><span>启用短信</span>
+          <label class="sw"><input type="checkbox" id="cfg-sms-on"><i></i></label>
+        </div>
+        <div class="cfg-row"><span>接收手机号</span><input id="cfg-sms-phone" placeholder="13800000000" style="width:160px"></div>
+        <div class="cfg-row"><span>AccessKey</span><input id="cfg-sms-key" placeholder="阿里云短信 AccessKey ID" style="width:300px"></div>
+        <div class="cfg-row"><span>AccessSecret</span><input id="cfg-sms-secret" placeholder="阿里云短信 AccessKey Secret" style="width:300px"></div>
+        <div class="cfg-row"><span>签名/模板</span><input id="cfg-sms-sign" placeholder="短信签名" style="width:130px"><input id="cfg-sms-template" placeholder="模板CODE" style="width:150px"></div>
+        <div class="cfg-hint">短信需自行开通短信服务商并付费（每条约几分钱）。配置后可先点"测试推送"验证。</div>
+      </div>
+    </div>
+    <div class="bt-foot">
+      <button class="modal-btn" id="cfg-test-btn">测试推送</button>
+      <button class="modal-btn primary" id="cfg-save-btn">保存设置</button>
+      <button class="modal-btn" onclick="window.__closeConfig()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 规则手册弹窗 -->
+<div class="modal-mask" id="rules-modal" style="display:none">
+  <div class="modal rules-modal">
+    <div class="modal-title">规则使用手册 <span class="bt-sub" id="rules-sub">趋势全景 · 所有规则整理</span></div>
+    <div class="modal-desc">基于蜡烛图 / 支撑阻力 / 量价理论 + 软件回测实证整理。所有数字来自软件历史回测，命中率随样本变化仅供参考。</div>
+    <div class="rules-wrap">
+      <div class="rules-nav" id="rules-nav"></div>
+      <div class="rules-body" id="rules-body"></div>
+    </div>
+    <div class="bt-foot">
+      <button class="modal-btn" onclick="window.__closeRules()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导入自选股弹窗 -->
+<div class="modal-mask" id="import-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">从同花顺导入自选股</div>
+    <div class="modal-desc">在<strong>同花顺</strong>里：自选股 → 右键 → 「导出自选股」/「备份自选股」，保存为文本文件。然后把文件内容全部复制，粘贴到下面：</div>
+    <textarea id="import-text" placeholder="每行一个股票代码即可，例如：&#10;600519 贵州茅台&#10;000001&#10;SH300750&#10;支持各种格式，自动识别 A 股代码并去重"></textarea>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="window.__closeImport()">取消</button>
+      <button class="modal-btn ok" onclick="window.__doImport()">导入</button>
+    </div>
+  </div>
+</div>
+<script src="app.js?v=40"></script>
+</body>
+</html>
