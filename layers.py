@@ -5,6 +5,7 @@
 import json, os, time
 import pandas as pd
 from data_fetcher import _get_json
+import analysis as an
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 ALL_A_FILE = os.path.join(BASE, "bt_data", "all_a.json")
@@ -129,7 +130,10 @@ def analyze_layers(code, daily_df):
     ind_rows = _load_ind_cache().get(ind) if ind else None
     if ind_rows and len(ind_rows) >= 60:
         ind_dir = _direction([r["close"] for r in ind_rows])
-    stl = _stock_trendline(daily_df)
+    # 个股趋势：与单股页/机会扫描统一，用严格趋势判断(analysis.analyze_trend)
+    _tr = an.analyze_trend(daily_df, "日线")
+    _dir = _tr.get("direction", "sideways")
+    stl = _dir if _dir != "sideways" else "none"
     resonance_bull = (mkt_dir == "up" and ind_dir == "up" and stl == "up")
     resonance_bear = (mkt_dir == "down" and ind_dir == "down" and stl == "down")
     return {

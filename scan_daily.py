@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from data_fetcher import get_kline
 import layers
+import analysis as an
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HIGHFIT_FILE = os.path.join(BASE, "highfit_pool.json")
@@ -67,15 +68,24 @@ def _scan_one(it):
         df = get_kline(code, "daily", 300, "qfq")
         if df is None or len(df) < 60:
             return None
+        # 与单股页一致：用严格趋势判断（analysis.analyze_trend）
+        trend = an.analyze_trend(df, "日线")
+        direction = trend.get("direction", "sideways")
+        strength = trend.get("strength", "weak")
+        # 硬否决：下降趋势的股票绝不列为机会（形态在下跌趋势中无效）
+        if direction == "down":
+            return None
         ly = layers.analyze_layers(code, df)
-        reso = ly["resonance_bull"]
-        stl = ly["stock"]["trendline"]
+        # 共振看涨：大盘↑ + 行业↑ + 个股严格趋势↑
+        reso = (ly["market"]["direction"] == "up" and
+                ly["industry"]["direction"] == "up" and
+                direction == "up")
         pats = detect_bullish(df)
         vol_hit = any(p[2] for p in pats)
         score = 0
         if reso:
             score += 2
-        if stl == "up" and pats:
+        if direction == "up" and pats:
             score += 2 if vol_hit else 1
         if score < 1:
             return None
@@ -87,8 +97,8 @@ def _scan_one(it):
         if pats:
             names = [p[0] for p in pats]
             tags.append("+".join(sorted(set(names))[:2]) + ("·放量" if vol_hit else ""))
-        if stl == "up":
-            tags.append("上升趋势线")
+        if direction == "up":
+            tags.append("上升趋势")
         return {
             "code": code, "name": name, "ind": ind,
             "level": score,
@@ -96,7 +106,8 @@ def _scan_one(it):
             "change_pct": round(chg * 100, 2),
             "tags": tags,
             "resonance": reso,
-            "trendline": stl,
+            "direction": direction,
+            "strength": strength,
             "pats": [p[0] for p in pats],
         }
     except Exception:
