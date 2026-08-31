@@ -646,9 +646,13 @@
       let min = lowsW[0];
       for (let i = 1; i < lowsW.length; i++) if (lowsW[i].price < min.price) min = lowsW[i];
       if (min.idx < last.idx && last.price > min.price) {
+        // 延长趋势线到最新K线之后（按斜率外推），放大后仍可见
+        const slope = (last.price - min.price) / (last.idx - min.idx);
+        const endIdx = Math.min(rows.length - 1, last.idx + 15);
+        const endPrice = last.price + slope * (endIdx - last.idx);
         marks.push([
-          { xAxis: min.idx, yAxis: min.price, lineStyle: { type: "dashed", color: "#f59e0b", width: 1.6 }, label: { formatter: "上升趋势线", color: "#f59e0b" } },
-          { xAxis: last.idx, yAxis: last.price }
+          { xAxis: rows[min.idx].date, yAxis: min.price, lineStyle: { type: "dashed", color: "#f59e0b", width: 1.6 }, label: { formatter: "上升趋势线", color: "#f59e0b", position: "insideStartTop" } },
+          { xAxis: rows[endIdx].date, yAxis: endPrice }
         ]);
       }
     }
@@ -658,9 +662,13 @@
       let max = highsW[0];
       for (let i = 1; i < highsW.length; i++) if (highsW[i].price > max.price) max = highsW[i];
       if (max.idx < last.idx && last.price < max.price) {
+        // 延长趋势线到最新K线之后（按斜率外推），放大后仍可见
+        const slope = (last.price - max.price) / (last.idx - max.idx);
+        const endIdx = Math.min(rows.length - 1, last.idx + 15);
+        const endPrice = last.price + slope * (endIdx - last.idx);
         marks.push([
-          { xAxis: max.idx, yAxis: max.price, lineStyle: { type: "dashed", color: "#38bdf8", width: 1.6 }, label: { formatter: "下降趋势线", color: "#38bdf8" } },
-          { xAxis: last.idx, yAxis: last.price }
+          { xAxis: rows[max.idx].date, yAxis: max.price, lineStyle: { type: "dashed", color: "#38bdf8", width: 1.6 }, label: { formatter: "下降趋势线", color: "#38bdf8", position: "insideStartTop" } },
+          { xAxis: rows[endIdx].date, yAxis: endPrice }
         ]);
       }
     }
@@ -732,11 +740,11 @@
     const resist = groups.filter(function (g) { return g.price > close; }).sort(function (a, b) { return b.score - a.score; }).slice(0, 2);
     support.forEach(function (g) {
       out.support.push({ price: Math.round(g.price), n: g.n, score: g.score });
-      out.marks.push({ yAxis: g.price, lineStyle: { type: "dashed", color: "rgba(48,164,108,.6)", width: 1 }, label: { formatter: "支撑 " + Math.round(g.price) + " ×" + g.n, color: "#4ec98a", position: "insideEndTop", fontSize: 10 } });
+      out.marks.push({ yAxis: g.price, lineStyle: { type: "dashed", color: "rgba(48,164,108,.6)", width: 1 }, label: { formatter: "支撑 " + Math.round(g.price) + " ×" + g.n, color: "#4ec98a", position: "insideStartTop", fontSize: 10 } });
     });
     resist.forEach(function (g) {
       out.resist.push({ price: Math.round(g.price), n: g.n, score: g.score });
-      out.marks.push({ yAxis: g.price, lineStyle: { type: "dashed", color: "rgba(229,72,77,.6)", width: 1 }, label: { formatter: "阻力 " + Math.round(g.price) + " ×" + g.n, color: "#ff8a8a", position: "insideEndTop", fontSize: 10 } });
+      out.marks.push({ yAxis: g.price, lineStyle: { type: "dashed", color: "rgba(229,72,77,.6)", width: 1 }, label: { formatter: "阻力 " + Math.round(g.price) + " ×" + g.n, color: "#ff8a8a", position: "insideStartTop", fontSize: 10 } });
     });
     return out;
   }
