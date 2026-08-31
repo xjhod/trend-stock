@@ -1,5 +1,5 @@
 {
-  "version": "1.6.2",
-  "note": "优化在线更新：改为后台异步下载+进度提示，更新期间不再卡死浏览器/阻塞行情；下载优先走国内加速源、超时缩短，更新更快更稳",
+  "version": "1.6.3",
+  "note": "K线图优化：支撑阻力线label移到左端不挡图形；趋势线改用日期坐标+延长15根，放大后不消失；扫描失败三层异常保护；高适配池自动创建bt_data目录",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
