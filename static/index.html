@@ -126,6 +126,7 @@
               <button type="button" class="ov-btn" id="ov-fib" onclick="window.__toggleOverlay('ov-fib')">斐波那契</button>
               <span class="tools-sep"></span>
               <button type="button" class="ov-btn bt-btn" id="btn-backtest" title="用历史数据验证各信号命中率">信号回测</button>
+              <button type="button" class="ov-btn bt-btn" id="btn-pattest" title="按每个形态统计历史出现后3/6/10日走势，验证形态可靠性">形态测试</button>
             </div>
             <div class="period-tabs" id="period-tabs">
               <button data-p="daily" class="active">日线</button>
@@ -174,6 +175,19 @@
     <div class="bt-foot">
       <button class="modal-btn primary" id="bt-refresh">重新回测</button>
       <button class="modal-btn" onclick="window.__closeBt()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 形态测试弹窗 -->
+<div class="modal-mask" id="pt-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">形态可靠性测试 <span class="bt-sub" id="pt-sub"></span></div>
+    <div class="modal-desc">扫描该股最近约 4 年历史，把所有<strong>按规则标注</strong>的蜡烛形态找出来（趋势内 + 量能确认，与图上标注一致），统计每个形态出现后 3 / 6 / 10 个交易日的实际走势。看涨形态 = 后续上涨命中，看跌形态 = 后续下跌命中。</div>
+    <div id="pt-body" class="bt-body">加载中...</div>
+    <div class="bt-foot">
+      <button class="modal-btn primary" id="pt-refresh">重新测试</button>
+      <button class="modal-btn" onclick="window.__closePt()">关闭</button>
     </div>
   </div>
 </div>

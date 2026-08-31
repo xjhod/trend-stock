@@ -197,6 +197,84 @@ def backtest_rows(rows, points_every=10, start_at=90, fwd_trend=10, fwd_sr=20, f
     return res
 
 
+def pattern_test_rows(rows, horizons=(3, 6, 10)):
+    """形态可靠性测试：按每个具体形态，统计出现后 N 个交易日（默认 3/6/10）的走势。
+
+    口径与软件内标注完全一致（复用 detect_patterns：趋势内 + 量能确认）。
+    对每个形态出现位置 idx：
+      - 看涨形态：后 N 日收盘价 > 形态日收盘价 → 命中
+      - 看跌形态：后 N 日收盘价 < 形态日收盘价 → 命中
+    返回按形态聚合：样本数、各 N 日命中率、平均收益（%）。
+    """
+    n = len(rows)
+    # 收集每个形态的所有出现位置（含形态日收盘价、方向）
+    events = {}  # name -> [ {idx, close, dir} ]
+    pats = detect_patterns(rows)
+    for idx, names in pats:
+        if idx + max(horizons) >= n:
+            continue
+        for nm in names:
+            if nm in BEAR:
+                d = -1
+            elif nm in BULL:
+                d = 1
+            else:
+                continue
+            events.setdefault(nm, []).append({"idx": idx, "close": rows[idx]["close"], "dir": d})
+    out = []
+    for name, evs in events.items():
+        by_day = {}
+        for H in horizons:
+            hit = tot = 0
+            rets = []
+            for e in evs:
+                f = rows[e["idx"] + H]["close"]
+                ret = (f - e["close"]) / e["close"] * 100
+                rets.append(ret)
+                tot += 1
+                if e["dir"] == 1 and f > e["close"]:
+                    hit += 1
+                elif e["dir"] == -1 and f < e["close"]:
+                    hit += 1
+            by_day[str(H)] = {
+                "hit": hit, "total": tot,
+                "rate": round(hit / tot * 100, 1) if tot else None,
+                "avg_ret": round(sum(rets) / len(rets), 2) if rets else None,
+            }
+        out.append({
+            "name": name,
+            "dir": "看涨" if evs[0]["dir"] == 1 else "看跌",
+            "count": len(evs),
+            "by_day": by_day,
+        })
+    # 按方向汇总（看涨形态合在一起、看跌形态合在一起）
+    def agg(dirv):
+        sel = [e for e in events.items() if e[1][0]["dir"] == dirv]
+        if not sel:
+            return None
+        res = {}
+        for H in horizons:
+            hit = tot = 0; rets = []
+            for _, evs in sel:
+                for e in evs:
+                    f = rows[e["idx"] + H]["close"]
+                    ret = (f - e["close"]) / e["close"] * 100
+                    rets.append(ret); tot += 1
+                    if dirv == 1 and f > e["close"]:
+                        hit += 1
+                    elif dirv == -1 and f < e["close"]:
+                        hit += 1
+            res[str(H)] = {"hit": hit, "total": tot,
+                           "rate": round(hit / tot * 100, 1) if tot else None,
+                           "avg_ret": round(sum(rets) / len(rets), 2) if rets else None}
+        return res
+    summary = {
+        "bull": agg(1),
+        "bear": agg(-1),
+    }
+    return {"patterns": out, "summary": summary, "horizons": list(horizons), "n": n}
+
+
 def pct(r):
     return (round(r["hit"] / r["t"] * 100, 1) if r["t"] else None, r["hit"], r["t"])
 

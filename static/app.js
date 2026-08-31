@@ -1317,6 +1317,74 @@
     if (e.target === btModal) btModal.style.display = "none";
   });
 
+  // ---------- 形态可靠性测试弹窗 ----------
+  const ptModal = document.getElementById("pt-modal");
+  const ptBody = document.getElementById("pt-body");
+  const ptSub = document.getElementById("pt-sub");
+  let ptBusy = false;
+  window.__closePt = function () { ptModal.style.display = "none"; };
+  function openPt() {
+    if (!currentCode) { setStatus("请先在左侧选择一只股票"); return; }
+    ptModal.style.display = "flex";
+    runPatternTest();
+  }
+  async function runPatternTest() {
+    if (ptBusy) return;
+    ptBusy = true;
+    const code = currentCode;
+    ptBody.innerHTML = '<div class="bt-loading">正在扫描 <b>' + code + '</b> 历史形态并统计后市走势 ...</div>';
+    try {
+      const res = await fetch("/api/pattern_test/" + code);
+      const d = await res.json();
+      if (!d.ok) { ptBody.innerHTML = '<div class="bt-loading">' + (d.error || "测试失败") + '</div>'; ptBusy = false; return; }
+      ptSub.textContent = (d.name ? d.name + " " : "") + d.code + " · " + d.n + "根 · " + d.range;
+      const H = d.horizons || [3, 6, 10];
+      const thH = H.map(function (h) { return "<th>" + h + "日胜率</th><th>" + h + "日均收益</th>"; }).join("");
+      let html = '<table class="bt-table"><thead><tr><th>形态</th><th>方向</th><th>样本</th>' + thH + '</tr></thead><tbody>';
+      // 方向汇总行
+      function sumRow(label, key, color) {
+        const sm = d.summary && d.summary[key];
+        if (!sm) return "";
+        let cells = "";
+        H.forEach(function (h) {
+          const b = sm[String(h)];
+          if (!b || !b.total) { cells += "<td>--</td><td>--</td>"; return; }
+          const r = b.rate == null ? "--" : '<span class="rate ' + rateClass(b.rate) + '">' + b.rate.toFixed(1) + "%</span>";
+          cells += "<td>" + r + " (" + b.hit + "/" + b.total + ")</td>";
+          cells += "<td>" + (b.avg_ret == null ? "--" : (b.avg_ret >= 0 ? "+" : "") + b.avg_ret.toFixed(2) + "%") + "</td>";
+        });
+        return '<tr class="pt-sum" style="color:' + color + '"><td><b>' + label + '（全部）</b></td><td>' + (key === "bull" ? "看涨" : "看跌") + '</td><td>' + (sm[H[0]] ? sm[H[0]].total : "--") + '</td>' + cells + '</tr>';
+      }
+      html += sumRow("看涨形态", "bull", "#30a46c");
+      html += sumRow("看跌形态", "bear", "#e5484d");
+      (d.patterns || []).forEach(function (p) {
+        const isBull = p.dir === "看涨";
+        const color = isBull ? "#30a46c" : "#e5484d";
+        let cells = "";
+        H.forEach(function (h) {
+          const b = p.by_day[String(h)];
+          if (!b || !b.total) { cells += "<td>--</td><td>--</td>"; return; }
+          const r = b.rate == null ? "--" : '<span class="rate ' + rateClass(b.rate) + '">' + b.rate.toFixed(1) + "%</span>";
+          cells += "<td>" + r + " (" + b.hit + "/" + b.total + ")</td>";
+          cells += "<td>" + (b.avg_ret == null ? "--" : (b.avg_ret >= 0 ? "+" : "") + b.avg_ret.toFixed(2) + "%") + "</td>";
+        });
+        const cls = isBull ? "pt-bull" : "pt-bear";
+        html += '<tr class="' + cls + '"><td>' + p.name + '</td><td style="color:' + color + '">' + p.dir + '</td><td>' + p.count + '</td>' + cells + '</tr>';
+      });
+      html += '</tbody></table>';
+      html += '<div class="bt-note">说明：胜率 = 看涨形态出现后 N 日上涨 / 看跌形态出现后 N 日下跌 的比例；均收益 = 后 N 日相对形态日收盘价的平均涨跌幅。样本数不足 10 时仅供参考。形态识别口径与图上标注完全一致（趋势内 + 量能确认）。</div>';
+      ptBody.innerHTML = html;
+    } catch (e) {
+      ptBody.innerHTML = '<div class="bt-loading">测试请求失败：' + e.message + '</div>';
+    }
+    ptBusy = false;
+  }
+  document.getElementById("btn-pattest").addEventListener("click", openPt);
+  document.getElementById("pt-refresh").addEventListener("click", runPatternTest);
+  ptModal.addEventListener("click", function (e) {
+    if (e.target === ptModal) ptModal.style.display = "none";
+  });
+
   // ---------- 窗口大小调整 ----------
   window.addEventListener("resize", () => {
     Object.values(charts).forEach(c => c && c.resize());

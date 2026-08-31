@@ -1,5 +1,5 @@
 {
-  "version": "1.6.3",
-  "note": "K线图优化：支撑阻力线label移到左端不挡图形；趋势线改用日期坐标+延长15根，放大后不消失；扫描失败三层异常保护；高适配池自动创建bt_data目录",
+  "version": "1.6.4",
+  "note": "新增形态可靠性测试：K线图工具栏'形态测试'按钮，按每个具体形态统计历史出现后3/6/10日胜率与平均收益（口径与图上标注一致：趋势内+量能确认）",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

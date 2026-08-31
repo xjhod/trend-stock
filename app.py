@@ -382,6 +382,29 @@ def api_backtest(code):
 
 
 # ---------------------------------------------------------------
+# 形态可靠性测试：按具体形态统计出现后 3/6/10 日走势
+# ---------------------------------------------------------------
+@app.route("/api/pattern_test/<code>")
+def api_pattern_test(code):
+    code = str(code).strip()
+    dk = _safe_call(lambda: _robust_kline(code, "daily", 1200), pd.DataFrame())
+    if dk.empty or len(dk) < 200:
+        return jsonify({"ok": False, "error": "历史数据不足"})
+    rows = bt._rows_from_df(dk)
+    res = bt.pattern_test_rows(rows)
+    return jsonify({
+        "ok": True,
+        "code": code,
+        "name": _lookup_name(code),
+        "n": len(dk),
+        "range": f"{dk.iloc[0]['date']} ~ {dk.iloc[-1]['date']}",
+        "horizons": res["horizons"],
+        "patterns": res["patterns"],
+        "summary": res["summary"],
+    })
+
+
+# ---------------------------------------------------------------
 # 层级趋势单独接口
 # ---------------------------------------------------------------
 @app.route("/api/layers/<code>")
