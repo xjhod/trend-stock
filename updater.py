@@ -129,10 +129,25 @@ def check_update():
     tried = []
     for s in cfg["sources"]:
         prefix = str(s.get("prefix", ""))
-        # GitHub直连(prefix为空)时 latest.json 优先走 jsdelivr 镜像：内容实时,
-        # 避免 raw.githubusercontent CDN 缓存(刚推送后几分钟内拉到旧版本)
+        # GitHub直连(prefix为空)：同时读 raw 直连(带时间戳,实时) 与 jsdelivr 镜像,
+        # 取版本号较高者 —— 规避 jsdelivr CDN 缓存滞后导致"明明推送了新版却显示已是最新"
         if not prefix:
-            url = _bust(f"https://cdn.jsdelivr.net/gh/{cfg['owner']}/{cfg['repo']}@{cfg['branch']}/latest.json")
+            candidates = [
+                _bust(f"https://raw.githubusercontent.com/{cfg['owner']}/{cfg['repo']}/{cfg['branch']}/latest.json"),
+                _bust(f"https://cdn.jsdelivr.net/gh/{cfg['owner']}/{cfg['repo']}@{cfg['branch']}/latest.json"),
+            ]
+            metas = []
+            for u in candidates:
+                try:
+                    rr = requests.get(u, timeout=8)
+                    rr.raise_for_status()
+                    metas.append(rr.json())
+                except Exception:
+                    continue
+            if not metas:
+                last_err = "GitHub直连读取版本失败"
+                continue
+            meta = max(metas, key=lambda m: _ver_tuple(str(m.get("version", ""))))
         else:
             url = _bust(prefix + raw_latest)
         tried.append(s["name"])
