@@ -85,6 +85,13 @@ def _raw_url(cfg, kind):
     return f"https://github.com/{o}/{r}/archive/refs/heads/{b}.zip"
 
 
+def _bust(url):
+    """给 raw 请求加时间戳参数，绕过 GitHub CDN 缓存（刚推送后立刻能查到新版）"""
+    import time as _t
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}t={int(_t.time() * 1000)}"
+
+
 def _should_update(rel):
     """是否是可更新的代码文件（数据文件一律保留）"""
     rel = rel.replace("\\", "/")
@@ -121,7 +128,13 @@ def check_update():
     last_err = None
     tried = []
     for s in cfg["sources"]:
-        url = s["prefix"] + raw_latest
+        prefix = str(s.get("prefix", ""))
+        # GitHub直连(prefix为空)时 latest.json 优先走 jsdelivr 镜像：内容实时,
+        # 避免 raw.githubusercontent CDN 缓存(刚推送后几分钟内拉到旧版本)
+        if not prefix:
+            url = _bust(f"https://cdn.jsdelivr.net/gh/{cfg['owner']}/{cfg['repo']}@{cfg['branch']}/latest.json")
+        else:
+            url = _bust(prefix + raw_latest)
         tried.append(s["name"])
         try:
             r = requests.get(url, timeout=8)
