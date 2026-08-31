@@ -1326,6 +1326,11 @@
   async function loadHighfit() {
     const box = document.getElementById("hf-list");
     try {
+      // 拉池子门槛信息（供高适配页签显示"市值≥X亿"）
+      fetch("/api/pool/info").then(r => r.json()).then(function (pi) {
+        window.__poolInfo = pi;
+        if (hfData) renderHighfit(hfData);
+      }).catch(function () {});
       const res = await fetch("/api/highfit");
       const data = await res.json();
       hfData = data;
@@ -1336,7 +1341,13 @@
     }
   }
   function renderHighfit(data) {
-    document.getElementById("hf-count").textContent = "高适配池 " + data.total + " 只 · " + data.groups.length + " 个行业";
+    // 显示池子门槛（来自 /api/pool/info，不阻塞列表渲染）
+    let thrTxt = "";
+    try {
+      const pi = window.__poolInfo;
+      if (pi && pi.threshold) thrTxt = "（市值≥" + pi.threshold + "亿）";
+    } catch (e) {}
+    document.getElementById("hf-count").textContent = "高适配池 " + data.total + " 只 · " + data.groups.length + " 个行业" + thrTxt;
     const box = document.getElementById("hf-list");
     box.innerHTML = "";
     data.groups.forEach(function (g) {
@@ -1789,8 +1800,37 @@
   // 启动静默检查：有新版才提示，避免打扰
   setTimeout(function () { checkUpdate(true); }, 4000);
 
+  // ---------- 顶部市场模式切换（常驻可见，一键牛熊） ----------
+  function loadModeSwitch() {
+    const sel = document.getElementById("ms-mode");
+    const sc = document.getElementById("ms-score");
+    if (!sel) return;
+    fetch("/api/env").then(r => r.json()).then(function (ev) {
+      if (ev && ev.score !== undefined && ev.score !== null) {
+        if (sc) {
+          sc.textContent = ev.score + "/6";
+          sc.className = "env-badge" + (ev.score >= ev.threshold ? " hi" : " lo");
+          sc.title = "市场环境评分（6分制）";
+        }
+        sel.value = ev.mode || "auto";
+      } else if (sc) {
+        sc.textContent = "--";
+      }
+    }).catch(function () {});
+    sel.addEventListener("change", function () {
+      const label = { auto: "自动", bull: "进取·牛市", bear: "稳健·熊市" }[sel.value] || sel.value;
+      fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ market: { mode: sel.value } }) })
+        .then(r => r.json()).then(function () {
+          showStatus("市场模式已切换为「" + label + "」，请到「今日机会」重新扫描");
+          loadModeSwitch();
+        }).catch(function () { alert("切换失败，请重试"); });
+    });
+  }
+
   // ---------- 初始化 ----------
   loadWatchlist();
+  loadModeSwitch();
   // 自动选中第一只自选股
   setTimeout(async () => {
     const res = await fetch("/api/watchlist");

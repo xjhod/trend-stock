@@ -488,3 +488,11 @@ body {
 .env-badge.hi { background:rgba(62,207,142,.2); color:#3ecf8e; }
 .env-badge.lo { background:rgba(255,107,107,.2); color:#ff6b6b; }
 .cfg-hint2 { font-size:11px; color:#888; margin-left:8px; }
+
+/* 顶部市场模式切换 */
+.mode-switch { display:inline-flex; align-items:center; gap:6px; margin-left:12px; }
+.mode-switch select {
+  padding:3px 6px; border-radius:6px; border:1px solid var(--line,#d9d9d9);
+  background:var(--bg2,#fff); color:var(--text,#333); font-size:12px; cursor:pointer;
+}
+.mode-switch select:focus { outline:none; border-color:var(--accent,#2b6cf6); }
