@@ -56,11 +56,25 @@ def set_threshold(threshold):
         return DEFAULT_THRESHOLD
 
 
+def _ensure_bt_data_dir():
+    """确保 bt_data 目录存在"""
+    d = os.path.join(BASE, "bt_data")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _load_all_a():
+    _ensure_bt_data_dir()
     try:
         return json.load(open(ALL_A_FILE, encoding="utf-8"))
     except Exception:
-        return []
+        # 文件不存在，自动从网络拉取全A列表
+        try:
+            import fetch_all_a
+            fetch_all_a.main()
+            return json.load(open(ALL_A_FILE, encoding="utf-8"))
+        except Exception:
+            return []
 
 
 def _stock_candidate(all_a, threshold):
