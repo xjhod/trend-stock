@@ -167,20 +167,20 @@ def apply_update(download_url):
     import requests
     cfg = load_config()
     raw_zip = _raw_url(cfg, "zip")
-    # 候选下载地址：优先传入的 download_url，再加各代理源拼的 zip 地址
+    # 候选下载地址：优先国内加速源（下载快、更稳定），GitHub 直连放最后兜底
     candidates = []
-    if download_url:
-        candidates.append(download_url)
     for s in cfg["sources"]:
         if s["prefix"]:
             candidates.append(s["prefix"] + raw_zip)
+    if download_url:
+        candidates.append(download_url)
     candidates = list(dict.fromkeys(candidates))  # 去重保序
     if not candidates:
         return {"ok": False, "msg": "缺少下载地址"}
     last_err = None
     for url in candidates:
         try:
-            r = requests.get(url, timeout=90)
+            r = requests.get(url, timeout=40)
             r.raise_for_status()
             data = r.content
             if not data:

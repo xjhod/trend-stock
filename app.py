@@ -488,12 +488,47 @@ def api_update_check():
     return jsonify(updater.check_update())
 
 
+# ---------------- 在线更新（异步后台执行，避免下载时阻塞服务导致浏览器卡死） ----------------
+UPDATE_STATE = {"state": "idle", "msg": "", "progress": 0, "replaced": []}
+
+def _start_async_update(url):
+    UPDATE_STATE["state"] = "running"
+    UPDATE_STATE["progress"] = 5
+    UPDATE_STATE["msg"] = "开始更新…"
+    UPDATE_STATE["replaced"] = []
+    def _job():
+        try:
+            UPDATE_STATE["progress"] = 15
+            UPDATE_STATE["msg"] = "正在下载更新包（视网络约 10-90 秒，期间不影响其他功能）…"
+            result = updater.apply_update(url)
+            if result.get("ok"):
+                UPDATE_STATE["state"] = "done"
+                UPDATE_STATE["progress"] = 100
+                UPDATE_STATE["msg"] = result.get("msg", "更新完成")
+                UPDATE_STATE["replaced"] = result.get("replaced", [])
+            else:
+                UPDATE_STATE["state"] = "error"
+                UPDATE_STATE["msg"] = result.get("msg", "更新失败")
+        except Exception as e:  # noqa
+            UPDATE_STATE["state"] = "error"
+            UPDATE_STATE["msg"] = "更新异常：" + str(e)
+    threading.Thread(target=_job, daemon=True).start()
+
 @app.route("/api/update/apply", methods=["POST"])
 def api_update_apply():
-    """下载并替换代码文件（保留用户数据）"""
+    """下载并替换代码文件（后台线程执行，立即返回，不阻塞服务）"""
     data = request.get_json(force=True) or {}
     url = data.get("download", "")
-    return jsonify(updater.apply_update(url))
+    if UPDATE_STATE["state"] == "running":
+        return jsonify({"ok": True, "started": True, "running": True})
+    _start_async_update(url)
+    return jsonify({"ok": True, "started": True})
+
+
+@app.route("/api/update/progress")
+def api_update_progress():
+    """查询后台更新进度"""
+    return jsonify(UPDATE_STATE)
 
 
 # ---------------- 模拟持仓 ----------------

@@ -1771,15 +1771,32 @@
           const go = document.getElementById("upd-go-btn");
           go.style.display = "";
           go.onclick = function () {
-            go.disabled = true; go.textContent = "更新中…";
+            go.disabled = true; go.textContent = "正在提交…";
             fetch("/api/update/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ download: d.download }) })
               .then(function (r) { return r.json(); })
               .then(function (r2) {
-                if (r2.ok) {
-                  updShow("✅ " + r2.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
+                if (r2 && r2.started) {
+                  updShow("正在更新…<br><br><span id='upd-prog' style='color:var(--accent)'>准备中…</span>" +
+                    "<div style='margin-top:10px;font-size:11px;color:var(--text-dim)'>更新在后台进行，页面不会被卡住；完成后按提示重启软件即可。请勿在更新期间关闭页面。</div>");
                   go.style.display = "none";
+                  var poll = setInterval(function () {
+                    fetch("/api/update/progress").then(function (r) { return r.json(); }).then(function (st) {
+                      var p = document.getElementById("upd-prog");
+                      if (!p) { clearInterval(poll); return; }
+                      if (st.state === "done") {
+                        clearInterval(poll);
+                        updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
+                      } else if (st.state === "error") {
+                        clearInterval(poll);
+                        updShow("更新失败：" + st.msg + "<br><br>可稍后重试或检查网络。");
+                        go.style.display = ""; go.disabled = false; go.textContent = "重新更新";
+                      } else {
+                        p.textContent = st.msg;
+                      }
+                    }).catch(function () {});
+                  }, 2000);
                 } else {
-                  updShow("更新失败：" + r2.msg);
+                  updShow("更新失败：" + ((r2 && r2.msg) || "未知错误"));
                   go.disabled = false; go.textContent = "立即更新";
                 }
               }).catch(function () { updShow("更新请求失败，请检查网络"); go.disabled = false; go.textContent = "立即更新"; });
