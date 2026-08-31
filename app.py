@@ -398,7 +398,10 @@ def api_layers(code):
 @app.route("/api/scan/run", methods=["POST"])
 def api_scan_run():
     """立即扫描高适配池"""
-    return jsonify(scan_daily.run_scan())
+    try:
+        return jsonify(scan_daily.run_scan())
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"扫描异常: {e}"}), 500
 
 
 @app.route("/api/scan/status")

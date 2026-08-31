@@ -580,12 +580,21 @@ def run_scan(limit=None, workers=8):
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = [ex.submit(_scan_one, it) for it in pool]
         for f in as_completed(futs):
-            r = f.result()
+            try:
+                r = f.result()
+            except Exception:
+                r = None  # 单只股票扫描失败不影响整体
             if r:
                 signals.append(r)
     signals.sort(key=lambda x: (-x["level"], x["change_pct"]))
     # 市场环境模式(用户可调): 决定是否过滤/仓位
-    env = env_judge.env_action()
+    try:
+        env = env_judge.env_action()
+    except Exception as e:
+        # 环境计算失败（网络/数据问题）时用默认值放行，不让整个扫描崩掉
+        env = {"action": "hold_buy", "pos_pct": 100, "score": None,
+               "mode": "unknown", "threshold": 4, "min_pos": 30,
+               "note": f"环境计算失败({e}), 默认放行"}
     if env["action"] == "filter_out":
         signals = []  # 环境评分不足(稳健/自动模式) → 空仓, 不推荐
     elif env["pos_pct"] < 100:
