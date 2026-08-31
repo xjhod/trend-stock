@@ -48,6 +48,7 @@
         <div class="hf-toolbar">
           <span id="scan-info">今日机会加载中…</span>
           <button class="hf-refresh" id="scan-run" title="立即扫描高适配池">▶ 扫描</button>
+          <div id="env-bar" class="env-bar" style="display:none"></div>
         </div>
         <div class="scan-list" id="scan-list"></div>
       </div>
@@ -193,6 +194,57 @@
         <div class="cfg-title">每日扫描</div>
         <div class="cfg-row"><span>自动扫描时间</span><input id="cfg-scan-time" value="15:35" style="width:90px" title="A股收盘后"></div>
         <div class="cfg-row"><span>自动推送机会</span><select id="cfg-push-level"><option value="1">全部信号</option><option value="2" selected>仅强机会(共振/放量形态)</option></select></div>
+      </div>
+      <div class="cfg-sec">
+        <div class="cfg-title">市场模式（牛熊判断）</div>
+        <div class="cfg-row">
+          <span>当前环境评分</span>
+          <span id="cfg-env-score" class="env-badge">加载中…</span>
+        </div>
+        <div class="cfg-row">
+          <span>市场模式</span>
+          <select id="cfg-market-mode" style="width:230px" title="自己判断当前牛熊来选用策略">
+            <option value="auto">自动（程序判断牛熊）</option>
+            <option value="bull">进取·牛市（动态仓位，不错过行情）</option>
+            <option value="bear">稳健·熊市（环境过滤，弱市空仓）</option>
+          </select>
+        </div>
+        <div class="cfg-row">
+          <span>评分阈值(0-6)</span>
+          <input id="cfg-market-threshold" type="number" min="0" max="6" step="1" value="4" style="width:70px">
+          <span class="cfg-hint2">稳健/自动模式下，评分低于阈值则空仓</span>
+        </div>
+        <div class="cfg-row">
+          <span>最低仓位%</span>
+          <input id="cfg-market-minpos" type="number" min="0" max="100" step="5" value="30" style="width:70px">
+          <span class="cfg-hint2">进取(牛市)模式的最低持仓比例</span>
+        </div>
+        <div class="cfg-hint" id="cfg-env-note"></div>
+      </div>
+      <div class="cfg-sec">
+        <div class="cfg-title">高适配池（动态更新）</div>
+        <div class="cfg-row">
+          <span>市值门槛</span>
+          <select id="cfg-pool-threshold" style="width:180px" title="高适配池按市值门槛动态重建">
+            <option value="100">100亿（机构白马）</option>
+            <option value="50">50亿（扩大覆盖面）</option>
+            <option value="30">30亿（回测收益最佳）</option>
+          </select>
+          <span class="cfg-hint2" id="cfg-pool-count"></span>
+        </div>
+        <div class="cfg-row">
+          <span>当前池规模</span>
+          <span id="cfg-pool-info">加载中…</span>
+        </div>
+        <div class="cfg-row">
+          <span>离场策略</span>
+          <span id="cfg-exit-style">加载中…</span>
+        </div>
+        <div class="cfg-hint">重建 = 按新门槛重筛池子 + 重建行业指数（动态更新，耗时约1-3分钟）。重建后请点「今日机会 → ▶ 扫描」重新扫描。</div>
+        <div style="margin-top:8px">
+          <button class="modal-btn primary" id="cfg-pool-build" title="按上面的市值门槛重建高适配池并重建行业指数">↻ 重建高适配池</button>
+          <span id="cfg-pool-progress" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+        </div>
       </div>
       <div class="cfg-sec">
         <div class="cfg-title">微信推送（任选其一）</div>

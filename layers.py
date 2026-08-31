@@ -229,11 +229,19 @@ def analyze_exit(code, daily_df):
     dd = closes[cur] / entry["px"] - 1
     mkt_weak = (mkt_dir == "down")
     days = cur - entry["T"]
+    # 牛熊离场切换：牛市双确认 / 熊市破线即走
+    try:
+        import env_judge
+        style, _ = env_judge.exit_style()
+    except Exception:
+        style = "hold"
 
     if not broken:
         state, label, reason = "hold", "持有", "未跌破上升趋势线，趋势完好"
     elif dd <= -0.10:
         state, label, reason = "stop", "止损", f"破线后回撤已达 {dd*100:.1f}%（≤-10%），触发止损"
+    elif style == "exit":
+        state, label, reason = "exit_signal", "破线离场", "跌破上升趋势线，破线即走（当前离场风格）"
     elif mkt_weak:
         state, label, reason = "exit_signal", "双确认离场", "跌破上升趋势线 + 大盘转弱，双确认离场信号"
     else:
@@ -253,4 +261,5 @@ def analyze_exit(code, daily_df):
         "mkt_weak": mkt_weak,
         "drawdown": round(dd * 100, 1),
         "market_dir": mkt_dir,
+        "exit_style": style,
     }

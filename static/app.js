@@ -1401,10 +1401,28 @@
     fetch("/api/scan/run", { method: "POST" }).then(r => r.json()).then(function (d) {
       if (d.ok) {
         if (infoEl) infoEl.textContent = "扫描完成，机会 " + (d.signals || []).length + " 只";
+        renderEnvBar(d.env || null);
         renderScanList();
       } else if (infoEl) infoEl.textContent = d.msg || "扫描失败";
     }).catch(function () { if (infoEl) infoEl.textContent = "扫描失败"; });
   });
+
+  // ---------- 市场环境条 ----------
+  function renderEnvBar(env) {
+    const bar = document.getElementById("env-bar");
+    if (!bar) return;
+    if (!env) { bar.style.display = "none"; return; }
+    const sc = env.score;
+    if (sc === null || sc === undefined) { bar.style.display = "none"; return; }
+    const cls = env.action === "filter_out" ? "env-bad" : "env-ok";
+    const modeTxt = { auto: "自动", bull: "进取·牛市", bear: "稳健·熊市" }[env.mode] || env.mode;
+    bar.innerHTML = '<span class="' + cls + '">环境 ' + sc + '/6</span>' +
+      ' · 模式 ' + modeTxt +
+      ' · 阈值 ' + env.threshold +
+      ' · 建议仓位 ' + (env.pos_pct || 0) + '%' +
+      ' · ' + (env.note || "");
+    bar.style.display = "";
+  }
 
   // ---------- 今日机会列表 ----------
   function renderScanList() {
@@ -1415,8 +1433,9 @@
       const sigs = d.signals || [];
       const st = d.status || {};
       if (infoEl) infoEl.textContent = (d.date ? d.date + " · " : "") + "机会 " + sigs.length + " 只" +
-        " · ★=信号强度（抄底最高2★、趋势3★）" +
+        " · ★=信号强度（抄底最高2★；趋势3★=含周线确认的真趋势，2★以下=日线反弹短线）" +
         (st.running ? " · 扫描中..." : (st.msg ? " · " + st.msg : ""));
+      renderEnvBar(d.env || null);
       if (!sigs.length) {
         listEl.innerHTML = '<div class="scan-empty">暂无符合条件的信号<br><span>大盘/行业震荡或未放量时规则不触发属正常。<br>点"▶ 扫描"可立即重跑。</span></div>';
         return;
@@ -1602,6 +1621,52 @@
         const k = id.replace("cfg-sms-", "");
         if (e && sms[k] !== undefined) e.value = sms[k];
       });
+      const m = c.market || {};
+      const mm = document.getElementById("cfg-market-mode");
+      if (mm) mm.value = m.mode || "auto";
+      const mt = document.getElementById("cfg-market-threshold");
+      if (mt) mt.value = (m.threshold !== undefined ? m.threshold : 4);
+      const mp = document.getElementById("cfg-market-minpos");
+      if (mp) mp.value = (m.min_pos !== undefined ? m.min_pos : 30);
+      const pt = document.getElementById("cfg-pool-threshold");
+      if (pt) pt.value = (m.pool_threshold !== undefined ? m.pool_threshold : 100);
+      // 显示当前环境评分
+      fetch("/api/env").then(r => r.json()).then(function (ev) {
+        const badge = document.getElementById("cfg-env-score");
+        const note = document.getElementById("cfg-env-note");
+        if (badge && ev.score !== undefined && ev.score !== null) {
+          badge.textContent = ev.score + " / 6";
+          badge.className = "env-badge" + (ev.score >= ev.threshold ? " hi" : " lo");
+        }
+        if (note) note.textContent = (ev.note || "");
+        // 离场策略（按牛熊模式）
+        const es = document.getElementById("cfg-exit-style");
+        if (es) {
+          if (ev && ev.det && ev.det.score !== undefined) {
+            const style = ev.style || (ev.mode === "bull" ? "hold" : (ev.mode === "bear" ? "exit" : (ev.score >= ev.threshold ? "hold" : "exit")));
+            es.innerHTML = (style === "exit" ? "<b>破线即走</b>（及时止盈·控回撤，熊市/震荡更稳）" : "<b>双确认</b>（破MA20+大盘转弱才离场·让利润奔跑，牛市更优）") +
+              "<br><span style='font-size:11px;color:var(--muted)'>" + (ev.note || "") + "</span>";
+          } else {
+            es.textContent = "数据不足";
+          }
+        }
+      }).catch(function () {});
+      // 高适配池信息
+      fetch("/api/pool/info").then(r => r.json()).then(function (pi) {
+        const sel = document.getElementById("cfg-pool-threshold");
+        const cnt = document.getElementById("cfg-pool-count");
+        const info = document.getElementById("cfg-pool-info");
+        function updCount() {
+          if (cnt && pi && pi.cand_counts) {
+            cnt.textContent = "候选：" + (pi.cand_counts[sel.value] || "-") + " 只";
+          }
+        }
+        if (sel && pi && pi.cand_counts) {
+          updCount();
+          sel.addEventListener("change", updCount);
+        }
+        if (info && pi) info.textContent = "当前池 " + pi.current_pool + " 只（门槛" + pi.threshold + "亿）";
+      }).catch(function () {});
     }).catch(function () {});
     document.getElementById("cfg-modal").style.display = "flex";
   }
@@ -1622,11 +1687,46 @@
         access_secret: cfgVal("cfg-sms-secret"),
         sign_name: cfgVal("cfg-sms-sign"),
         template: cfgVal("cfg-sms-template")
+      },
+      market: {
+        mode: document.getElementById("cfg-market-mode").value,
+        threshold: parseFloat(document.getElementById("cfg-market-threshold").value) || 4,
+        min_pos: parseFloat(document.getElementById("cfg-market-minpos").value) || 30,
+        pool_threshold: parseInt(document.getElementById("cfg-pool-threshold").value, 10) || 100
       }
     };
     fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(r => r.json()).then(function () { alert("设置已保存"); })
       .catch(function () { alert("保存失败"); });
+  }
+  // 重建高适配池（动态更新）
+  document.getElementById("cfg-pool-build").addEventListener("click", function () {
+    const thr = parseInt(document.getElementById("cfg-pool-threshold").value, 10) || 100;
+    const btn = document.getElementById("cfg-pool-build");
+    const prog = document.getElementById("cfg-pool-progress");
+    btn.disabled = true;
+    prog.textContent = "正在重建池子（拉取K线评估流动性/波动，约1-3分钟）…";
+    // 先保存门槛配置，再触发重建
+    saveConfigQuiet();
+    fetch("/api/pool/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ threshold: thr }) })
+      .then(r => r.json()).then(function (d) {
+        if (d && d.ok) {
+          prog.innerHTML = "完成：池子 " + d.pool_size + " 只（跳过" + d.skipped + "），行业指数 " + d.ind_count + " 个，耗时 " + d.elapsed + " 秒。" +
+            "请到「今日机会」点「▶ 扫描」重新扫描。";
+          const info = document.getElementById("cfg-pool-info");
+          if (info) info.textContent = "当前池 " + d.pool_size + " 只（门槛" + d.threshold + "亿）";
+        } else {
+          prog.textContent = "失败：" + ((d && d.msg) || "未知错误");
+        }
+      }).catch(function (e) { prog.textContent = "请求失败：" + e; })
+      .finally(function () { btn.disabled = false; });
+  });
+  function saveConfigQuiet() {
+    const body = {
+      market: { pool_threshold: parseInt(document.getElementById("cfg-pool-threshold").value, 10) || 100 }
+    };
+    fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .catch(function () {});
   }
   document.getElementById("cfg-test-btn").addEventListener("click", function () {
     saveConfig();

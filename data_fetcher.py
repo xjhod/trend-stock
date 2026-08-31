@@ -118,7 +118,7 @@ def _f(x):
 # ---------------------------------------------------------------
 # 2. 历史K线（东方财富）
 # ---------------------------------------------------------------
-def _kline_from_eastmoney(code, klt, fqt, params_base):
+def _kline_from_eastmoney(code, klt, fqt, params_base, limit=300):
     """东财 K 线（前复权），返回 DataFrame；失败返回空"""
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
     params = dict(params_base)
@@ -140,7 +140,7 @@ def _kline_from_eastmoney(code, klt, fqt, params_base):
                 })
             df = pd.DataFrame(rows)
             if not df.empty:
-                return df.tail(300)
+                return df.tail(limit)
     except Exception:
         pass
     return pd.DataFrame()
@@ -195,7 +195,7 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
     hit = _cache_get(ck)
     if hit is not None:
         return hit
-    df = _kline_from_eastmoney(code, klt, fqt, params_base)
+    df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
     if df.empty:
         df = _kline_from_sina(code, period, limit)
     _cache_set(ck, df)

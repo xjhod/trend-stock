@@ -13,6 +13,7 @@ from datetime import datetime
 
 from data_fetcher import get_kline
 import layers
+import env_judge
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 POS_FILE = os.path.join(BASE, "my_positions.json")
@@ -112,18 +113,24 @@ def refresh():
             item["cur_price"] = round(cur, 2)
             item["ret_pct"] = round(ret, 2)
             item["high_since"] = round(high_since, 2)
-            # 离场建议
+            # 离场建议（按牛熊模式切换：牛市双确认/熊市破线即走）
             advice, note = "持有", ""
+            style, style_note = env_judge.exit_style()
+            item["exit_style"] = style
             if p.get("buy_price") and cur <= high_since * 0.90:
                 advice = "建议止损"
-                note = f"自买入以来最高 {high_since} 回撤已超10%"
+                note = f"自买入以来最高 {high_since} 回撤已超10%（止损线）"
             else:
-                # 破MA20 + 大盘转弱
+                # 破MA20
                 try:
                     ma20 = float(df["close"].iloc[-21:-1].mean())
-                    if cur < ma20 and mkt_dir == "down":
-                        advice = "建议离场"
-                        note = f"跌破MA20({ma20:.2f}) + 大盘转弱"
+                    if cur < ma20:
+                        if style == "exit":
+                            advice = "建议离场"
+                            note = f"跌破MA20({ma20:.2f})，破线即走（{style_note}）"
+                        elif mkt_dir == "down":
+                            advice = "建议离场"
+                            note = f"跌破MA20({ma20:.2f}) + 大盘转弱，双确认离场（{style_note}）"
                 except Exception:
                     pass
             item["advice"] = advice
@@ -186,17 +193,23 @@ def stock_position_info(code, daily_df=None):
                     high_since = max(closes[start:]) if start < len(closes) else cur
                     info["cur_price"] = round(cur, 2)
                     info["ret_pct"] = round((cur / p["buy_price"] - 1) * 100, 2)
+                    style, style_note = env_judge.exit_style()
+                    info["exit_style"] = style
                     if cur <= high_since * 0.90:
                         info["advice"] = "建议止损"
-                        info["note"] = f"自买入以来最高 {round(high_since,2)} 回撤已超10%"
+                        info["note"] = f"自买入以来最高 {round(high_since,2)} 回撤已超10%（止损线）"
                     else:
                         try:
                             ma20 = float(daily_df["close"].iloc[-21:-1].mean())
                             mkt_rows = layers.get_market_kline(300)
                             mkt_dir = layers._direction([r["close"] for r in mkt_rows]) if mkt_rows else "unknown"
-                            if cur < ma20 and mkt_dir == "down":
-                                info["advice"] = "建议离场"
-                                info["note"] = f"跌破MA20({round(ma20,2)}) + 大盘转弱"
+                            if cur < ma20:
+                                if style == "exit":
+                                    info["advice"] = "建议离场"
+                                    info["note"] = f"跌破MA20({round(ma20,2)})，破线即走（{style_note}）"
+                                elif mkt_dir == "down":
+                                    info["advice"] = "建议离场"
+                                    info["note"] = f"跌破MA20({round(ma20,2)}) + 大盘转弱，双确认离场（{style_note}）"
                         except Exception:
                             pass
                 except Exception:

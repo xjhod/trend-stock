@@ -1,20 +1,20 @@
-# -*- coding: utf-8 -*-
 """模拟持仓跟踪（纸上交易）
-用途: 将"今日机会"虚拟买入, 每日跟踪, 按既定离场规则决定卖出, 20个交易日后结算。
-
+用途: 将"今日机会"虚拟买入, 每日跟踪, 按既定离场规则决定卖出, 趋势未破位则继续持有。
 离场规则（复用用户实证规则, 针对模拟持仓逐日执行）:
-  1. 移动止损: 当前收盘 <= 买入以来最高收盘 * 0.90  -> 卖出（回撤10%止盈/止损）
-  2. 到期离场: 持有满20个交易日 -> 卖出
-  3. 双确认离场: 个股破线(跌破买入时上升趋势线) 且 大盘转弱 -> 卖出
-  4. 趋势完好则继续持有
+  1. 移动止损: 当前收盘 <= 买入以来最高收盘 * 0.90  -> 卖出（回撤10%止盈/止损, 风控底线）
+  2. 系统性转弱(死叉+5日跌2%) → 清已亏损/破位个股, 保留盈利趋势股
+  3. 双确认离场: 个股跌破MA20 且 大盘转弱 -> 卖出
+  4. 趋势未破位则继续持有（无固定持有期限, 让利润奔跑）
 每只票虚拟资金固定 10 万元, 买入价 = 导入日收盘价。
 """
-import json, os, time, threading
+import json
+import scan_daily, os, time, threading
 from datetime import datetime, date
 
 from data_fetcher import get_kline
 import layers
 import analysis as an
+import env_judge
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 PAPER_FILE = os.path.join(BASE, "paper_trades.json")
@@ -103,16 +103,27 @@ def refresh():
         # 1. 移动止损: 从买入以来最高收盘回撤>=10% (止盈/止损兼顾)
         if h["high_since"] > 0 and px <= h["high_since"] * 0.90:
             exit_price, reason = px, f"移动止损(自最高回撤{(px/h['high_since']-1)*100:.1f}%)"
-        # 2. 到期: 满20个交易日
-        elif h["days"] >= 20:
-            exit_price, reason = px, "20日到期离场"
-        # 3. 双确认: 个股跌破MA20 + 大盘转弱
+        # 2. 大盘系统性转弱(死叉+5日跌2%) → 清已亏损/破位个股, 保留盈利趋势股
+        elif scan_daily._mkt_system_weak():
+            try:
+                c20 = float(df["close"].iloc[-21:-1].mean())
+                # 亏损(当前价<=买入价) 或 破位(当前价<MA20) → 清仓
+                if px <= h["entry_price"] or px < c20:
+                    exit_price, reason = px, "系统性转弱·清弱势仓"
+                # 盈利且未破位 → 保留(等个股自身破位/止损再走)
+            except Exception:
+                pass
+        # 3. 破MA20 离场（按牛熊模式切换离场风格）
         else:
             try:
                 c20 = float(df["close"].iloc[-21:-1].mean())
                 broken = px < c20
-                if broken and mkt_dir == "down":
-                    exit_price, reason = px, "破MA20+大盘转弱双确认离场"
+                style, style_note = env_judge.exit_style()
+                if broken:
+                    if style == "exit":
+                        exit_price, reason = px, f"破MA20即走（{style_note}）"
+                    elif mkt_dir == "down":
+                        exit_price, reason = px, "破MA20+大盘转弱双确认离场"
             except Exception:
                 pass
         if exit_price is not None:

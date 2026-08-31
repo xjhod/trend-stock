@@ -477,3 +477,14 @@ body {
 .scan-rat.up { background:rgba(38,166,91,.22); color:#3ecf8e; }
 .scan-rat.down { background:rgba(229,72,77,.22); color:#ff6b6b; }
 .scan-rat.flat { background:rgba(150,150,160,.22); color:#aaa; }
+
+/* 市场环境(牛熊判断) */
+.env-bar { margin:8px 2px 4px; padding:6px 10px; border-radius:8px; font-size:12px;
+  background:rgba(120,130,255,.10); border:1px solid rgba(120,130,255,.25); color:#c8c8e8; }
+.env-bar .env-ok { color:#3ecf8e; font-weight:600; }
+.env-bar .env-bad { color:#ff6b6b; font-weight:600; }
+.env-badge { display:inline-block; padding:1px 8px; border-radius:8px; font-size:12px;
+  background:rgba(120,130,255,.18); color:#c0c0ff; font-weight:600; }
+.env-badge.hi { background:rgba(62,207,142,.2); color:#3ecf8e; }
+.env-badge.lo { background:rgba(255,107,107,.2); color:#ff6b6b; }
+.cfg-hint2 { font-size:11px; color:#888; margin-left:8px; }

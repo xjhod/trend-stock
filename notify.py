@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "wechat": {"enabled": False, "provider": "serverchan", "token": ""},
     "sms": {"enabled": False, "provider": "aliyun", "access_key": "", "access_secret": "",
             "sign_name": "", "template": "", "phone": ""},
+    "market": {"mode": "auto", "threshold": 4, "min_pos": 30, "pool_threshold": 100},
 }
 
 

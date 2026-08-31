@@ -18,6 +18,7 @@ import notify
 import updater
 import paper_trade
 import positions
+import pool_manager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
@@ -424,8 +425,52 @@ def api_config_set():
         cfg["wechat"] = w
     if "sms" in data:
         cfg["sms"].update(data["sms"])
+    if "market" in data:
+        m = cfg["market"]
+        for k in ("mode", "threshold", "min_pos", "pool_threshold"):
+            if k in data["market"]:
+                m[k] = data["market"][k]
+        cfg["market"] = m
     notify.save_config(cfg)
     return jsonify({"ok": True})
+# ---------------- 高适配池（参数化 + 动态更新） ----------------
+@app.route("/api/pool/info")
+def api_pool_info():
+    return jsonify(pool_manager.pool_info())
+@app.route("/api/pool/build", methods=["POST"])
+def api_pool_build():
+    """按市值门槛重建高适配池 + 行业指数（动态更新）。
+    阈值可选: {threshold: 30/50/100}，默认用配置值。会覆盖 highfit_pool.json。"""
+    data = request.get_json(silent=True) or {}
+    threshold = data.get("threshold")
+    if threshold is None:
+        threshold = pool_manager.get_threshold()
+    threshold = int(threshold)
+    if threshold not in pool_manager.POOL_LIMIT:
+        return jsonify({"ok": False, "msg": f"市值门槛仅支持 {sorted(pool_manager.POOL_LIMIT)} 亿"}), 400
+    try:
+        r = pool_manager.build_pool(threshold)
+        pool_manager.set_threshold(threshold)
+        return jsonify(r)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"构建失败: {e}"}), 500
+
+
+@app.route("/api/env", methods=["GET"])
+def api_env():
+    """当前市场环境评分与决策(供前端展示, 辅助用户牛熊判断)"""
+    try:
+        import env_judge
+        d = env_judge.env_action()
+        try:
+            style, style_note = env_judge.exit_style()
+            d["style"] = style
+            d["exit_note"] = style_note
+        except Exception:
+            pass
+        return jsonify(d)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)})
 
 
 @app.route("/api/config/test", methods=["POST"])
