@@ -621,6 +621,16 @@ if __name__ == "__main__":
     import os as _os
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
     print(f"趋势全景 启动: http://{_HOST}:5000")
+    # 自动确保大盘指数在自选股中（上证指数/深证成指）
+    _wl = _load_watchlist()
+    _added = False
+    for _idx in ("sh000001", "sz399001"):
+        if _idx not in _wl:
+            _wl.append(_idx)
+            _added = True
+    if _added:
+        _save_watchlist(_wl)
+        print("已自动添加上证指数/深证成指到自选股")
     # 每日收盘后(15:35)自动扫描 + 启动时补扫
     scan_daily.schedule_daily(15, 35)
     threading.Timer(3, scan_daily.maybe_scan_on_startup).start()

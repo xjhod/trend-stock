@@ -1,5 +1,5 @@
 {
-  "version": "1.6.6",
-  "note": "新增指数支持：上证指数(sh000001)、深证成指(sz399001)可加入自选股，K线图、趋势判断、MACD/RSI、支撑阻力位完整渲染。修复指数代码前缀重复导致行情获取失败的问题，修复自选股列表指数code匹配失败不显示的问题。",
+  "version": "1.6.7",
+  "note": "启动时自动将上证指数(sh000001)、深证成指(sz399001)添加到自选股（如未添加），更新后重启即可在自选股列表看到大盘指数。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
