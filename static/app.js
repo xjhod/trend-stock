@@ -530,17 +530,19 @@
       const bull = r.close > r.open, bear = r.close < r.open;
       const t = trends[i];
       const names = [];
+      let strong = false; // 形态强度：强形态(吞没实体比>1.5/锤子下影比>2.5/乌云或穿刺插入>70%)
       // 伞形线：下影线长(≥2倍实体)、上影极短，颜色无关；按所处趋势分：涨→上吊线(顶部看跌)，跌→锤子线(底部看涨)
       if (lower >= rng * 0.6 && upper <= rng * 0.15 && body >= rng * 0.05) {
         if (t === "up") names.push("上吊线");
         else if (t === "down") names.push("锤子线");
+        if (lower / Math.max(body, 0.001) >= 2.5) strong = true;
       }
       // 吞没（必须在一段明显趋势中）
       if (i >= 1) {
         const p = rows[i - 1];
         const pBody = Math.abs(p.close - p.open);
-        if (bull && p.close < p.open && r.open <= p.close && r.close >= p.open && body > pBody * 1.05 && t === "down") names.push("看涨吞没");
-        if (bear && p.close > p.open && r.open >= p.close && r.close <= p.open && body > pBody * 1.05 && t === "up") names.push("看跌吞没");
+        if (bull && p.close < p.open && r.open <= p.close && r.close >= p.open && body > pBody * 1.05 && t === "down") { names.push("看涨吞没"); if (body / Math.max(pBody, 0.001) >= 1.5) strong = true; }
+        if (bear && p.close > p.open && r.open >= p.close && r.close <= p.open && body > pBody * 1.05 && t === "up") { names.push("看跌吞没"); if (body / Math.max(pBody, 0.001) >= 1.5) strong = true; }
       }
       // 乌云盖顶：上涨趋势中，白实体后黑实体跳空高开，收盘深插白实体(≥一半)
       if (i >= 1 && t === "up") {
@@ -548,7 +550,7 @@
         const pBody = p.close - p.open;
         if (pBody > 0 && bear && r.open > p.high) {
           const ins = (p.close - r.close) / pBody;
-          if (ins >= 0.5) names.push("乌云盖顶");
+          if (ins >= 0.5) { names.push("乌云盖顶"); if (ins >= 0.7) strong = true; }
         }
       }
       // 穿刺形态：下跌趋势中，黑实体后白实体跳空低开，收盘深刺黑实体(≥一半)
@@ -557,7 +559,7 @@
         const pBody = p.open - p.close;
         if (pBody > 0 && bull && r.open < p.low) {
           const ins = (r.close - p.close) / pBody;
-          if (ins >= 0.5) names.push("穿刺形态");
+          if (ins >= 0.5) { names.push("穿刺形态"); if (ins >= 0.7) strong = true; }
         }
       }
       // 三根组合（红三兵/三只乌鸦/启明星/黄昏星均结合趋势）
@@ -577,7 +579,7 @@
         for (let k = Math.max(0, i - 5); k < i; k++) vSum += rows[k].volume;
         const vBase = vSum / (i >= 5 ? 5 : Math.max(1, i));
         if (vBase > 0 && rows[i].volume >= vBase * 1.3) {
-          out.push({ index: i, names: names });
+          out.push({ index: i, names: names, strong: strong });
         }
       }
     }
@@ -792,9 +794,22 @@
     // 跳空 + 形态
     const gapByIndex = {}, patByIndex = {};
     detectGaps(rows).forEach(g => gapByIndex[g.index] = g.type);
+    // 层级方向（用于逆势判断）：看涨形态需大盘/行业/个股全down，看跌需全up
+    const L = (stockData && stockData.layers) || {};
+    const mktDir = (L.market && L.market.direction) || "unknown";
+    const indDir = (L.industry && L.industry.direction) || "unknown";
     detectPatterns(rows).forEach(p => {
-      const strong = p.names.filter(n => STRONG_PATTERNS.indexOf(n) >= 0);
-      patByIndex[p.index] = { all: p.names, strong: strong };
+      const strongNames = p.names.filter(n => STRONG_PATTERNS.indexOf(n) >= 0);
+      const nm = strongNames[0] || p.names[0];
+      const bearish = BEAR_PATTERNS.indexOf(nm) >= 0;
+      const stockTrend = trendAt(rows, p.index);
+      // 逆势：看涨形态需大盘+行业+个股全down；看跌形态需全up
+      const contra = bearish
+        ? (mktDir === "up" && indDir === "up" && stockTrend === "up")
+        : (mktDir === "down" && indDir === "down" && stockTrend === "down");
+      // 强信号 = 逆势共振 + 形态强度（回测实证：看涨逆势+强形态10日胜率56.9%）
+      const isSuperStrong = contra && p.strong;
+      patByIndex[p.index] = { all: p.names, strong: strongNames, contra: contra, superStrong: isSuperStrong, bearish: bearish };
     });
     const gapMarks = [], patMarks = [];
     const sr = calcSupportResistance(rows);
@@ -819,18 +834,23 @@
       const pt = patByIndex[i];
       if (pt && pt.strong.length && i >= PAT_START) {
         const nm = pt.strong[0];
-        const bearish = BEAR_PATTERNS.indexOf(nm) >= 0;
-        // 分级：看涨形态→强信号(金)；看跌形态→参考(灰)；低适配→全部弱化
+        const bearish = pt.bearish;
+        // 强信号 = 逆势共振 + 形态强度（回测实证：看涨逆势+强形态10日胜率56.9%）
+        const isSuper = pt.superStrong;
+        // 分级：强信号→★醒目标注；看涨形态→金色；看跌形态→参考(灰)；低适配→全部弱化
         const isRef = bearish || adaptInfo.level === "low";
-        const lbl = isRef ? nm + "·参考" : nm;
+        const lbl = isSuper ? "★" + nm : (isRef ? nm + "·参考" : nm);
         // 形态标在柱体外部：看跌→柱体上方(压力侧)，看涨→柱体下方(支撑侧)，避免遮挡蜡烛
-        const yPos = bearish ? r.high * 1.02 : r.low * 0.98;
+        const yPos = bearish ? r.high * 1.025 : r.low * 0.975;
         const pos = bearish ? "top" : "bottom";
+        // 强信号用更醒目的颜色和大小
+        const superColor = bearish ? "#ff4d4f" : "#ff7a45";
+        const superLabelColor = bearish ? "#ff7875" : "#ffa940";
         patMarks.push({
           coord: [r.date, yPos], value: lbl,
-          symbol: "diamond", symbolSize: isRef ? 6 : 9,
-          itemStyle: { color: bearish ? "#64748b" : (adaptInfo.level === "low" ? "#94a3b8" : "#f59e0b"), borderColor: "#0d1117", borderWidth: 1 },
-          label: { show: true, formatter: lbl, position: pos, distance: 5, color: bearish ? "#94a3b8" : (adaptInfo.level === "low" ? "#cbd5e1" : "#fcd34d"), fontSize: 11, backgroundColor: "rgba(13,17,23,.75)", padding: [2, 4], borderRadius: 3 }
+          symbol: isSuper ? "star" : "diamond", symbolSize: isSuper ? 12 : (isRef ? 6 : 9),
+          itemStyle: { color: isSuper ? superColor : (bearish ? "#64748b" : (adaptInfo.level === "low" ? "#94a3b8" : "#f59e0b")), borderColor: "#0d1117", borderWidth: 1 },
+          label: { show: true, formatter: lbl, position: pos, distance: 6, color: isSuper ? superLabelColor : (bearish ? "#94a3b8" : (adaptInfo.level === "low" ? "#cbd5e1" : "#fcd34d")), fontSize: isSuper ? 12 : 11, fontWeight: isSuper ? "bold" : "normal", backgroundColor: isSuper ? "rgba(255,122,69,.18)" : "rgba(13,17,23,.75)", padding: [2, 5], borderRadius: 3 }
         });
       }
     });

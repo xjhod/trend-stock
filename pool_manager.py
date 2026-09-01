@@ -28,7 +28,7 @@ IND_CACHE_FILE = os.path.join(BASE, "bt_data", "ind_idx_cache.json")
 HIGHFIT_FILE = os.path.join(BASE, "highfit_pool.json")
 
 # 市值门槛(亿) -> 候选池上限（按市值排序取前N，控制扫描与K线拉取耗时）
-POOL_LIMIT = {100: 260, 50: 460, 30: 760}
+POOL_LIMIT = {100: 260, 50: 460, 30: 4500}
 DEFAULT_THRESHOLD = 100
 
 _LOCK = threading.Lock()
@@ -100,7 +100,7 @@ def _stock_candidate(all_a, threshold):
 def _fetch_one(code):
     """拉日线并计算过滤特征。返回 (df, 特征dict) 或 None"""
     try:
-        df = get_kline(code, "daily", 200, "qfq")
+        df = get_kline(code, "daily", 1000, "qfq")
         if df is None or len(df) < 120:
             return None
         rows = df.to_dict("records")

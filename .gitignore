@@ -1,7 +1,6 @@
 # 用户数据（不推仓库、更新时也保留）
 watchlist.json
 daily_signals.json
-highfit_pool.json
 update_config.json
 config.json
 
@@ -10,7 +9,6 @@ __pycache__/
 *.pyc
 *.log
 server.log
-bt_data/
 research/*.json
 
 # 打包产物
@@ -22,3 +20,8 @@ my_positions.json
 
 # 备份文件
 *.bak
+
+# bt_data 下除行业指数缓存外都忽略
+bt_data/*
+!bt_data/ind_idx_cache.json
+!bt_data/all_a.json
