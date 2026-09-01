@@ -1488,38 +1488,44 @@
       box.appendChild(div);
     });
   }
-  // Tab 切换（自选股 / 高适配 / 今日机会 / 模拟持仓）
+  // Tab 切换（自选股 / 高适配 / 今日机会 / 模拟持仓 / 我的持仓 / 行业轮动）
   const tabWatch = document.getElementById("tab-watch");
   const tabHigh = document.getElementById("tab-highfit");
   const tabScan = document.getElementById("tab-scan");
   const tabPaper = document.getElementById("tab-paper");
   const tabPos = document.getElementById("tab-pos");
+  const tabIndustry = document.getElementById("tab-industry");
   function switchTab(name) {
     const isWatch = name === "watch";
     const isHigh = name === "highfit";
     const isScan = name === "scan";
     const isPaper = name === "paper";
     const isPos = name === "pos";
+    const isIndustry = name === "industry";
     tabWatch.classList.toggle("active", isWatch);
     tabHigh.classList.toggle("active", isHigh);
     tabScan.classList.toggle("active", isScan);
     if (tabPaper) tabPaper.classList.toggle("active", isPaper);
     if (tabPos) tabPos.classList.toggle("active", isPos);
+    if (tabIndustry) tabIndustry.classList.toggle("active", isIndustry);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
     document.getElementById("panel-highfit").style.display = isHigh ? "" : "none";
     document.getElementById("panel-scan").style.display = isScan ? "" : "none";
     if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
     if (document.getElementById("panel-pos")) document.getElementById("panel-pos").style.display = isPos ? "" : "none";
+    if (document.getElementById("panel-industry")) document.getElementById("panel-industry").style.display = isIndustry ? "" : "none";
     if (isHigh && !hfData) loadHighfit();
     if (isScan) renderScanList();
     if (isPaper) renderPaper();
     if (isPos) renderPositions();
+    if (isIndustry) loadIndustryTrend();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
   tabHigh.addEventListener("click", function () { switchTab("highfit"); });
   tabScan.addEventListener("click", function () { switchTab("scan"); });
   if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
+  if (tabIndustry) tabIndustry.addEventListener("click", function () { switchTab("industry"); });
   document.getElementById("hf-refresh").addEventListener("click", function () { loadHighfit(); });
   document.getElementById("scan-run").addEventListener("click", function () {
     const infoEl = document.getElementById("scan-info");
@@ -1959,6 +1965,103 @@
         }).catch(function () { alert("切换失败，请重试"); });
     });
   }
+
+  // ---------- 行业轮动 ----------
+  let indData = null;
+  let currentInd = null;
+
+  async function loadIndustryTrend() {
+    const infoEl = document.getElementById("ind-info");
+    const listEl = document.getElementById("ind-list");
+    const stocksEl = document.getElementById("ind-stocks");
+    if (infoEl) infoEl.textContent = "行业趋势加载中…";
+    if (stocksEl) stocksEl.style.display = "none";
+    if (listEl) listEl.style.display = "";
+    try {
+      const res = await fetch("/api/industry/trend");
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.msg || "加载失败");
+      indData = data;
+      if (infoEl) infoEl.textContent = "趋势向上 " + data.total_up + "/" + data.total_ind + " 个行业（前20）";
+      listEl.innerHTML = "";
+      (data.items || []).forEach(function (it, idx) {
+        const div = document.createElement("div");
+        div.className = "ind-item" + (currentInd === it.name ? " active" : "");
+        const strengthCls = it.strength === "strong" ? "strong" : (it.strength === "medium" ? "medium" : "weak");
+        const strengthText = it.strength === "strong" ? "强" : (it.strength === "medium" ? "中" : "弱");
+        div.innerHTML =
+          '<div class="ind-name">' +
+            '<span style="color:var(--text-dim);font-size:11px;width:18px">' + (idx + 1) + '</span>' +
+            '<span>' + it.name + '</span>' +
+            '<span class="ind-strength-tag ' + strengthCls + '">' + strengthText + '</span>' +
+            '<span class="ind-score" style="margin-left:auto">' + it.score + '</span>' +
+          '</div>' +
+          '<div class="ind-meta">' +
+            '<span class="ind-ret" style="color:' + (it.ret20 >= 0 ? 'var(--up)' : 'var(--down)') + '">20日 ' + (it.ret20 >= 0 ? '+' : '') + it.ret20 + '%</span>' +
+            '<span class="ind-count">' + it.stock_count + ' 只高适配</span>' +
+          '</div>';
+        div.addEventListener("click", function () {
+          currentInd = it.name;
+          document.querySelectorAll(".ind-item").forEach(function (el) { el.classList.remove("active"); });
+          div.classList.add("active");
+          loadIndustryStocks(it.name);
+        });
+        listEl.appendChild(div);
+      });
+    } catch (e) {
+      if (infoEl) infoEl.textContent = "加载失败：" + e.message;
+    }
+  }
+
+  async function loadIndustryStocks(indName) {
+    const listEl = document.getElementById("ind-list");
+    const stocksEl = document.getElementById("ind-stocks");
+    const titleEl = document.getElementById("ind-stocks-title");
+    const stocksListEl = document.getElementById("ind-stocks-list");
+    if (listEl) listEl.style.display = "none";
+    if (stocksEl) stocksEl.style.display = "";
+    if (titleEl) titleEl.textContent = indName + " · 强信号个股";
+    if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载中…</li>';
+    try {
+      const res = await fetch("/api/industry/" + encodeURIComponent(indName) + "/stocks");
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.msg || "加载失败");
+      stocksListEl.innerHTML = "";
+      if (!data.items || !data.items.length) {
+        stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">该行业暂无可识别的强信号个股</li>';
+        return;
+      }
+      (data.items || []).forEach(function (s) {
+        const li = document.createElement("li");
+        const sigText = (s.signals || []).join(" · ");
+        li.innerHTML =
+          '<div class="wl-main">' +
+            '<div class="wl-name">' + s.name + '</div>' +
+            '<div class="wl-code" style="font-size:10px;color:var(--text-dim)">' + sigText + '</div>' +
+          '</div>' +
+          '<div class="wl-price">' +
+            '<div class="p ' + cls(s.change_pct) + '">' + fmt(s.price) + '</div>' +
+            '<div class="c ' + cls(s.change_pct) + '">' + sign(s.change_pct) + fmt(s.change_pct) + '%</div>' +
+          '</div>';
+        li.addEventListener("click", function () { selectStock(s.code); });
+        stocksListEl.appendChild(li);
+      });
+    } catch (e) {
+      if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载失败：' + e.message + '</li>';
+    }
+  }
+
+  // 行业轮动事件绑定
+  document.addEventListener("DOMContentLoaded", function () {
+    const indRefresh = document.getElementById("ind-refresh");
+    if (indRefresh) indRefresh.addEventListener("click", function () { loadIndustryTrend(); });
+    const indBack = document.getElementById("ind-back");
+    if (indBack) indBack.addEventListener("click", function () {
+      currentInd = null;
+      document.getElementById("ind-stocks").style.display = "none";
+      document.getElementById("ind-list").style.display = "";
+    });
+  });
 
   // ---------- 初始化 ----------
   // 窗口resize防抖：避免频繁重绘导致卡顿

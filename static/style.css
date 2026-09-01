@@ -500,3 +500,32 @@ body {
   background:var(--bg2,#fff); color:var(--text,#333); font-size:12px; cursor:pointer;
 }
 .mode-switch select:focus { outline:none; border-color:var(--accent,#2b6cf6); }
+
+/* ---------- 行业轮动 ---------- */
+.ind-list { flex:1; overflow-y:auto; min-height:0; padding-bottom:8px; }
+.ind-item {
+  padding:8px 14px; cursor:pointer; border-bottom:1px solid var(--border);
+  display:flex; flex-direction:column; gap:2px; transition:background .15s;
+}
+.ind-item:hover { background:rgba(255,255,255,.04); }
+.ind-item.active { background:rgba(245,158,11,.12); border-left:3px solid var(--accent); }
+.ind-item .ind-name { font-size:13px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; }
+.ind-item .ind-meta { font-size:11px; color:var(--text-dim); display:flex; gap:10px; }
+.ind-item .ind-score { font-size:12px; font-weight:700; color:var(--up); }
+.ind-strength-tag {
+  font-size:10px; padding:1px 5px; border-radius:3px; font-weight:600;
+}
+.ind-strength-tag.strong { background:rgba(229,72,77,.15); color:#ff7875; }
+.ind-strength-tag.medium { background:rgba(245,158,11,.15); color:#ffa940; }
+.ind-strength-tag.weak { background:rgba(139,148,158,.15); color:#8b949e; }
+.ind-stocks { flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.ind-stocks-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 14px; border-bottom:1px solid var(--border); background:var(--bg3);
+}
+.ind-stocks-header span { font-size:13px; font-weight:600; color:var(--text); }
+.ind-back {
+  background:transparent; border:1px solid var(--border); color:var(--text-dim);
+  border-radius:5px; cursor:pointer; font-size:12px; padding:3px 8px;
+}
+.ind-back:hover { color:var(--accent); border-color:var(--accent); }

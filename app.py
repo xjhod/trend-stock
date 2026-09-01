@@ -617,6 +617,114 @@ def index():
     return app.send_static_file("index.html")
 
 
+# ---------------- 行业轮动（行业趋势看板） ----------------
+def _calc_ind_trend(rows):
+    """计算行业趋势状态和强度（B标准：收盘>MA20 + MA20上行 + MA5>MA10）"""
+    if not rows or len(rows) < 25:
+        return "unknown", 0, 0, 0, 0
+    closes = [r["close"] for r in rows]
+    cur = closes[-1]
+    ma5 = sum(closes[-5:]) / 5
+    ma10 = sum(closes[-10:]) / 10
+    ma20 = sum(closes[-20:]) / 20
+    ma20_prev = sum(closes[-21:-1]) / 20 if len(closes) >= 21 else ma20
+    ma20_slope = (ma20 - ma20_prev) / ma20_prev * 100 if ma20_prev else 0
+    ret20 = (cur / closes[-20] - 1) * 100 if len(closes) >= 20 else 0
+    is_up = cur > ma20 and ma20 > ma20_prev and ma5 > ma10
+    is_down = cur < ma20 and ma20 < ma20_prev and ma5 < ma10
+    if is_up:
+        direction = "up"
+    elif is_down:
+        direction = "down"
+    else:
+        direction = "sideways"
+    score = 0
+    if direction == "up":
+        score += min(ma20_slope * 50, 30)
+        score += min((ma5 / ma10 - 1) * 200, 20) if ma10 else 0
+        score += min(max(ret20, 0), 25)
+        score += 25
+        if ret20 > 30:
+            score -= min((ret20 - 30) * 0.5, 15)
+    elif direction == "down":
+        score = -abs(ma20_slope) * 30 - 10
+    strength = "strong" if score >= 50 else ("medium" if score >= 30 else "weak")
+    return direction, strength, round(score, 1), round(ma20_slope, 3), round(ret20, 1)
+
+
+@app.route("/api/industry/trend")
+def api_industry_trend():
+    """行业趋势看板：返回趋势向上的前20个行业，按强度排序"""
+    ind_cache = layers._load_ind_cache()
+    try:
+        with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
+            pool = json.load(f)
+    except Exception:
+        pool = []
+    results = []
+    for ind_name, rows in ind_cache.items():
+        if not ind_name or ind_name == "未知" or len(rows) < 25:
+            continue
+        direction, strength, score, ma20_slope, ret20 = _calc_ind_trend(rows)
+        if direction != "up":
+            continue
+        count = sum(1 for s in pool if s.get("ind") == ind_name)
+        results.append({
+            "name": ind_name, "direction": direction, "strength": strength,
+            "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
+            "stock_count": count, "latest_close": round(rows[-1]["close"], 2),
+        })
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return jsonify({"ok": True, "total_up": len(results), "total_ind": len(ind_cache), "items": results[:20]})
+
+
+@app.route("/api/industry/<ind_name>/stocks")
+def api_industry_stocks(ind_name):
+    """返回指定行业内有强信号的高适配股票"""
+    import urllib.parse
+    ind_name = urllib.parse.unquote(ind_name)
+    try:
+        with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
+            pool = json.load(f)
+    except Exception:
+        return jsonify({"ok": False, "msg": "高适配池加载失败"}), 500
+    ind_stocks = [s for s in pool if s.get("ind") == ind_name]
+    if not ind_stocks:
+        return jsonify({"ok": True, "industry": ind_name, "items": []})
+    items = []
+    for s in ind_stocks[:50]:
+        code = s.get("code")
+        try:
+            daily = df.get_kline(code, "daily", 120, "qfq")
+            if daily is None or len(daily) < 30:
+                continue
+            pats = scan_daily.detect_bullish(daily)
+            strong_pats = [p for p in pats if p[2]]
+            trend = an.analyze_trend(daily, "日线")
+            direction = trend.get("direction", "sideways")
+            cur_price = float(daily.iloc[-1]["close"])
+            signals = []
+            if strong_pats:
+                signals.append("强形态:" + strong_pats[0][0])
+            if direction == "up" and trend.get("strength") == "strong":
+                signals.append("上升趋势")
+            if len(daily) >= 5:
+                recent_high = max(daily["high"].tolist()[-20:])
+                if cur_price >= recent_high * 0.99 and float(daily.iloc[-2]["close"]) < recent_high:
+                    signals.append("突破阻力")
+            if signals:
+                items.append({
+                    "code": code, "name": s.get("name"), "price": round(cur_price, 2),
+                    "change_pct": round((cur_price / float(daily.iloc[-2]["close"]) - 1) * 100, 2),
+                    "direction": direction, "strength": trend.get("strength", "weak"),
+                    "signals": signals, "pats": [p[0] for p in pats[:3]],
+                })
+        except Exception:
+            continue
+    items.sort(key=lambda x: len(x["signals"]), reverse=True)
+    return jsonify({"ok": True, "industry": ind_name, "total_in_ind": len(ind_stocks), "with_signal": len(items), "items": items[:30]})
+
+
 if __name__ == "__main__":
     import os as _os
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
