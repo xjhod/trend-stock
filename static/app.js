@@ -5,8 +5,11 @@
   let currentCode = null;
   let currentPeriod = "daily";
   let klineCache = {};          // code -> {daily:[], weekly:[], monthly:[]}
+  let klineCacheOrder = [];     // LRU顺序，最新访问的在末尾
+  const CACHE_MAX = 10;         // 最多缓存10只股票，防内存泄漏
   let stockData = null;         // 当前股票的完整分析数据
   let charts = {};
+  let stockFetchCtrl = null;    // 当前股票请求的AbortController，切换时取消旧请求
 
   // ---------- 工具 ----------
   function fmt(v, digits) {
@@ -169,6 +172,11 @@
 
   // ---------- 选择股票 ----------
   async function selectStock(code, isRetry) {
+    // 取消旧请求，避免快速切换时旧请求返回覆盖新数据
+    if (stockFetchCtrl) { try { stockFetchCtrl.abort(); } catch (e) {} }
+    stockFetchCtrl = new AbortController();
+    const myCtrl = stockFetchCtrl;
+
     currentCode = code;
     // 高亮
     document.querySelectorAll("#watchlist li, #hf-list li").forEach(li => li.classList.remove("active"));
@@ -184,10 +192,20 @@
       '</div>';
     showStatus(isRetry ? "首次加载失败，正在自动重试…" : "加载 " + code + " 数据中…");
     try {
-      const res = await fetchTimeout("/api/stock/" + code, {}, 12000);
+      const res = await fetch("/api/stock/" + code, { signal: myCtrl.signal });
+      if (myCtrl.signal.aborted) return;  // 已被新请求取消，忽略
       const data = await res.json();
+      if (myCtrl.signal.aborted) return;
       if (!data.ok) throw new Error(data.msg || "加载失败");
       stockData = data;
+      // LRU缓存：更新访问顺序，超出上限删除最旧的
+      const idx = klineCacheOrder.indexOf(code);
+      if (idx >= 0) klineCacheOrder.splice(idx, 1);
+      klineCacheOrder.push(code);
+      while (klineCacheOrder.length > CACHE_MAX) {
+        const old = klineCacheOrder.shift();
+        delete klineCache[old];
+      }
       klineCache[code] = {
         daily: data.kline || [],
         weekly: data.kline_weekly || [],
@@ -196,6 +214,7 @@
       renderStock(data);
       showStatus("数据更新于 " + new Date().toLocaleTimeString());
     } catch (e) {
+      if (myCtrl.signal.aborted) return;  // 被取消的请求，不显示错误
       if (!isRetry) {
         // 数据源抖动，自动重试一次
         setTimeout(function () { selectStock(code, true); }, 800);
@@ -827,7 +846,7 @@
     });
     // 形态标签只在最近一段内标注，避免全图堆满；标签上下交替防止重叠
     const adaptInfo = calcAdapt();
-    var PAT_START = Math.max(0, rows.length - 30);
+    var PAT_START = Math.max(0, rows.length - 20);
     rows.forEach(function (r, i) {
       if (gapByIndex[i] === "up") gapMarks.push({ coord: [r.date, r.high * 1.006], value: "高开缺口", symbol: "triangle", symbolRotate: 0, symbolSize: 11, itemStyle: { color: "#e5484d" }, label: { show: false } });
       if (gapByIndex[i] === "down") gapMarks.push({ coord: [r.date, r.low * 0.994], value: "低开缺口", symbol: "triangle", symbolRotate: 180, symbolSize: 11, itemStyle: { color: "#30a46c" }, label: { show: false } });
@@ -1942,6 +1961,16 @@
   }
 
   // ---------- 初始化 ----------
+  // 窗口resize防抖：避免频繁重绘导致卡顿
+  let resizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      if (charts.kline) charts.kline.resize();
+      if (charts.fund) charts.fund.resize();
+      if (charts.fundamental) charts.fundamental.resize();
+    }, 200);
+  });
   loadWatchlist();
   loadModeSwitch();
   // 自动选中第一只自选股

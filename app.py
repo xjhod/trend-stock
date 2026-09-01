@@ -306,7 +306,7 @@ def api_stock(code):
     fundamentals = an.analyze_fundamentals(fin)
     conclusion = an.generate_conclusion(trends, tech, fund, fundamentals, quote)
 
-    kline_data = _kline_to_json(daily.tail(180))
+    kline_data = _kline_to_json(daily.tail(120))
     kline_weekly = _kline_to_json(weekly.tail(120))
     kline_monthly = _kline_to_json(monthly.tail(60))
     fund_data = _fund_to_json(ff.tail(60))
