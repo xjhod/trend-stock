@@ -47,8 +47,10 @@ def _code_prefix(code):
 
 
 def _tencent_symbol(code):
-    """腾讯代码前缀：sh/sz/bj"""
-    code = str(code)
+    """腾讯代码前缀：sh/sz/bj。已带前缀的直接返回（支持指数如sh000001/sz399001）"""
+    code = str(code).lower()
+    if code.startswith(("sh", "sz", "bj")):
+        return code
     if code.startswith("6"):
         return "sh" + code
     if code.startswith(("0", "3")):

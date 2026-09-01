@@ -129,11 +129,20 @@ def _f(v):
 def api_watchlist():
     codes = _load_watchlist()
     quotes = df.get_realtime_quotes(codes)
-    qmap = {q["code"]: q for q in quotes}
+    def _norm(c):
+        c = str(c).lower()
+        for p in ("sh", "sz", "bj"):
+            if c.startswith(p):
+                return c[2:]
+        return c
+    qmap = {_norm(q["code"]): q for q in quotes}
     ordered = []
     for c in codes:
-        if c in qmap:
-            ordered.append(qmap[c])
+        nc = _norm(c)
+        if nc in qmap:
+            q = dict(qmap[nc])
+            q["code"] = c  # 保留原始code（带前缀的指数）
+            ordered.append(q)
     return jsonify({"ok": True, "items": ordered})
 
 
