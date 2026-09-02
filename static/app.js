@@ -1436,103 +1436,46 @@
     }
   });
 
-  // ---------- 高适配池（按行业分组） ----------
-  let hfData = null;
-  async function loadHighfit() {
-    const box = document.getElementById("hf-list");
-    try {
-      // 拉池子门槛信息（供高适配页签显示"市值≥X亿"）
-      fetch("/api/pool/info").then(r => r.json()).then(function (pi) {
-        window.__poolInfo = pi;
-        if (hfData) renderHighfit(hfData);
-      }).catch(function () {});
-      const res = await fetch("/api/highfit");
-      const data = await res.json();
-      hfData = data;
-      renderHighfit(data);
-    } catch (e) {
-      document.getElementById("hf-count").textContent = "高适配池加载失败";
-      box.innerHTML = '<div class="flat" style="color:var(--text-dim);font-size:12px;padding:14px">加载失败，请重试</div>';
-    }
-  }
-  function renderHighfit(data) {
-    // 显示池子门槛（来自 /api/pool/info，不阻塞列表渲染）
-    let thrTxt = "";
-    try {
-      const pi = window.__poolInfo;
-      if (pi && pi.threshold) thrTxt = "（市值≥" + pi.threshold + "亿）";
-    } catch (e) {}
-    document.getElementById("hf-count").textContent = "高适配池 " + data.total + " 只 · " + data.groups.length + " 个行业" + thrTxt;
-    const box = document.getElementById("hf-list");
-    box.innerHTML = "";
-    data.groups.forEach(function (g) {
-      const div = document.createElement("div");
-      div.className = "hf-group";
-      const title = document.createElement("div");
-      title.className = "hf-title";
-      title.innerHTML = '<span>' + g.ind + '（' + g.count + '）</span><span class="hf-arrow">▼</span>';
-      title.addEventListener("click", function () { div.classList.toggle("collapsed"); });
-      const ul = document.createElement("ul");
-      ul.className = "hf-items";
-      g.items.forEach(function (it) {
-        const li = document.createElement("li");
-        if (it.code === currentCode) li.className = "active";
-        li.innerHTML =
-          '<div class="wl-main"><div class="wl-name">' + it.name + '</div><div class="wl-code">' + it.code + '</div></div>' +
-          '<div class="wl-price"><div class="p ' + cls(it.pct_chg) + '">' + fmt(it.price) + '</div><div class="c ' + cls(it.pct_chg) + '">' + sign(it.pct_chg) + fmt(it.pct_chg) + '%</div></div>';
-        li.addEventListener("click", function () { selectStock(it.code); });
-        ul.appendChild(li);
-      });
-      div.appendChild(title);
-      div.appendChild(ul);
-      box.appendChild(div);
-    });
-  }
-  // Tab 切换（自选股 / 高适配 / 今日机会 / 模拟持仓 / 我的持仓 / 行业轮动）
+  // Tab 切换（自选股 / 今日机会 / 模拟持仓 / 我的持仓 / 行业轮动）
   const tabWatch = document.getElementById("tab-watch");
-  const tabHigh = document.getElementById("tab-highfit");
   const tabScan = document.getElementById("tab-scan");
   const tabPaper = document.getElementById("tab-paper");
   const tabPos = document.getElementById("tab-pos");
   const tabIndustry = document.getElementById("tab-industry");
   function switchTab(name) {
     const isWatch = name === "watch";
-    const isHigh = name === "highfit";
     const isScan = name === "scan";
     const isPaper = name === "paper";
     const isPos = name === "pos";
     const isIndustry = name === "industry";
     tabWatch.classList.toggle("active", isWatch);
-    tabHigh.classList.toggle("active", isHigh);
     tabScan.classList.toggle("active", isScan);
     if (tabPaper) tabPaper.classList.toggle("active", isPaper);
     if (tabPos) tabPos.classList.toggle("active", isPos);
     if (tabIndustry) tabIndustry.classList.toggle("active", isIndustry);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
-    document.getElementById("panel-highfit").style.display = isHigh ? "" : "none";
     document.getElementById("panel-scan").style.display = isScan ? "" : "none";
     if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
     if (document.getElementById("panel-pos")) document.getElementById("panel-pos").style.display = isPos ? "" : "none";
     if (document.getElementById("panel-industry")) document.getElementById("panel-industry").style.display = isIndustry ? "" : "none";
-    if (isHigh && !hfData) loadHighfit();
     if (isScan) renderScanList();
     if (isPaper) renderPaper();
     if (isPos) renderPositions();
     if (isIndustry) loadIndustryTrend();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
-  tabHigh.addEventListener("click", function () { switchTab("highfit"); });
   tabScan.addEventListener("click", function () { switchTab("scan"); });
   if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
   if (tabIndustry) tabIndustry.addEventListener("click", function () { switchTab("industry"); });
-  document.getElementById("hf-refresh").addEventListener("click", function () { rebuildHighfitPool(); });
+  // 行业轮动：重建高适配池
+  document.getElementById("ind-rebuild").addEventListener("click", function () { rebuildHighfitPool(); });
   async function rebuildHighfitPool() {
-    const infoEl = document.getElementById("hf-count");
-    const box = document.getElementById("hf-list");
+    const infoEl = document.getElementById("ind-info");
+    const listEl = document.getElementById("ind-list");
     if (!confirm("确定要重建高适配池吗？\n\n将按30亿市值门槛重新筛选全A股，约需1-3分钟。\n重建后行业轮动、今日机会等功能都会使用新池子。")) return;
     if (infoEl) infoEl.textContent = "正在重建高适配池（约1-3分钟）…";
-    if (box) box.innerHTML = '<div class="flat" style="color:var(--text-dim);font-size:12px;padding:20px 16px;text-align:center">正在从全A股筛选高适配股票…<br><br>市值门槛：30亿<br><span id="pool-build-prog" style="color:var(--accent)">准备中…</span><br><br>请稍候，不要关闭页面</div>';
+    if (listEl) listEl.innerHTML = '<div class="flat" style="color:var(--text-dim);font-size:12px;padding:20px 16px;text-align:center">正在从全A股筛选高适配股票…<br><br>市值门槛：30亿<br><span id="pool-build-prog" style="color:var(--accent)">准备中…</span><br><br>请稍候，不要关闭页面</div>';
     try {
       const res = await fetch("/api/pool/build", {
         method: "POST",
@@ -1550,13 +1493,13 @@
           var progEl = document.getElementById("pool-build-prog");
           if (st.state === "done") {
             clearInterval(poll);
-            hfData = null;
-            if (infoEl) infoEl.textContent = "重建完成！共 " + ((st.result && (st.result.total || st.result.count)) || "?") + " 只，正在加载…";
-            setTimeout(function () { loadHighfit(); }, 500);
+            indData = null;
+            if (infoEl) infoEl.textContent = "重建完成！共 " + ((st.result && (st.result.total || st.result.count)) || "?") + " 只，正在加载行业…";
+            setTimeout(function () { loadIndustryTrend(); }, 500);
           } else if (st.state === "error") {
             clearInterval(poll);
             if (infoEl) infoEl.textContent = "重建失败：" + (st.msg || "未知错误");
-            if (box) box.innerHTML = '<div class="flat" style="color:var(--down);font-size:12px;padding:20px 16px">重建失败：' + (st.msg || "未知错误") + '<br><br>可稍后重试</div>';
+            if (listEl) listEl.innerHTML = '<div class="flat" style="color:var(--down);font-size:12px;padding:20px 16px">重建失败：' + (st.msg || "未知错误") + '<br><br>可稍后重试</div>';
           } else {
             if (progEl) progEl.textContent = (st.msg || "重建中…") + "（" + (st.progress || 0) + "%）";
           }
@@ -2039,23 +1982,32 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.msg || "加载失败");
       indData = data;
-      if (infoEl) infoEl.textContent = "趋势向上 " + data.total_up + "/" + data.total_ind + " 个行业（前20）";
+      const upN = data.total_up || 0;
+      const totalN = data.total_ind || 0;
+      if (infoEl) infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个（市值≥30亿）";
       listEl.innerHTML = "";
       (data.items || []).forEach(function (it, idx) {
         const div = document.createElement("div");
         div.className = "ind-item" + (currentInd === it.name ? " active" : "");
+        const dir = it.direction || "sideways";
+        // 方向箭头 + 颜色
+        const dirArrow = dir === "up" ? "▲" : (dir === "down" ? "▼" : "◆");
+        const dirColor = dir === "up" ? "#e5484d" : (dir === "down" ? "#2f9e44" : "#8b949e");
+        const dirText = dir === "up" ? "上升" : (dir === "down" ? "下降" : "横盘");
+        // 强度标签
         const strengthCls = it.strength === "strong" ? "strong" : (it.strength === "medium" ? "medium" : "weak");
         const strengthText = it.strength === "strong" ? "强" : (it.strength === "medium" ? "中" : "弱");
         div.innerHTML =
           '<div class="ind-name">' +
-            '<span style="color:var(--text-dim);font-size:11px;width:18px">' + (idx + 1) + '</span>' +
+            '<span style="color:' + dirColor + ';font-size:12px;width:18px">' + dirArrow + '</span>' +
             '<span>' + it.name + '</span>' +
-            '<span class="ind-strength-tag ' + strengthCls + '">' + strengthText + '</span>' +
+            (dir === "up" ? '<span class="ind-strength-tag ' + strengthCls + '">' + strengthText + '</span>' : '') +
             '<span class="ind-score" style="margin-left:auto">' + it.score + '</span>' +
           '</div>' +
           '<div class="ind-meta">' +
+            '<span style="color:' + dirColor + ';font-size:11px">' + dirText + '</span>' +
             '<span class="ind-ret" style="color:' + (it.ret20 >= 0 ? 'var(--up)' : 'var(--down)') + '">20日 ' + (it.ret20 >= 0 ? '+' : '') + it.ret20 + '%</span>' +
-            '<span class="ind-count">' + it.stock_count + ' 只高适配</span>' +
+            '<span class="ind-count">' + it.stock_count + ' 只</span>' +
           '</div>';
         div.addEventListener("click", function () {
           currentInd = it.name;

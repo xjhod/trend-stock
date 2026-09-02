@@ -690,16 +690,17 @@ def api_industry_trend():
         if not ind_name or ind_name == "未知" or len(rows) < 25:
             continue
         direction, strength, score, ma20_slope, ret20 = _calc_ind_trend(rows)
-        if direction != "up":
-            continue
         count = sum(1 for s in pool if s.get("ind") == ind_name)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
             "stock_count": count, "latest_close": round(rows[-1]["close"], 2),
         })
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return jsonify({"ok": True, "total_up": len(results), "total_ind": len(ind_cache), "items": results[:20]})
+    # 排序：up 排前面（按score降序），sideways 中间，down 排后面
+    dir_rank = {"up": 0, "sideways": 1, "down": 2}
+    results.sort(key=lambda x: (dir_rank.get(x["direction"], 3), -x["score"]))
+    total_up = sum(1 for r in results if r["direction"] == "up")
+    return jsonify({"ok": True, "total_up": total_up, "total_ind": len(results), "items": results})
 
 
 @app.route("/api/industry/<ind_name>/stocks")
