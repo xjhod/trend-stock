@@ -5,6 +5,7 @@
 import json
 import os
 import threading
+import time
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -28,6 +29,7 @@ DEFAULT_WATCHLIST = ["600519", "000001", "300750", "601318", "000858"]
 app = Flask(__name__, static_folder="static", static_url_path="")
 _lock = threading.Lock()
 POOL_BUILD_STATE = {"state": "idle", "msg": "", "progress": 0, "result": None}
+INDUSTRY_STOCKS_CACHE = {}
 
 # ---------------------------------------------------------------
 # 工具
@@ -705,9 +707,14 @@ def api_industry_trend():
 
 @app.route("/api/industry/<ind_name>/stocks")
 def api_industry_stocks(ind_name):
-    """返回指定行业内全部高适配股票（有强信号的排前面，没信号的也显示）"""
+    """返回指定行业内全部高适配股票（有强信号的排前面，没信号的也显示）。
+    并行拉取K线+信号检测，结果缓存10分钟。"""
     import urllib.parse
     ind_name = urllib.parse.unquote(ind_name)
+    # 缓存命中（10分钟）
+    _c = INDUSTRY_STOCKS_CACHE.get(ind_name)
+    if _c and time.time() - _c[0] < 600:
+        return jsonify(_c[1])
     try:
         with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
             pool = json.load(f)
@@ -716,18 +723,19 @@ def api_industry_stocks(ind_name):
     ind_stocks = [s for s in pool if s.get("ind") == ind_name]
     if not ind_stocks:
         return jsonify({"ok": True, "industry": ind_name, "items": []})
-    items = []
-    for s in ind_stocks[:50]:
+    total_in_ind = len(ind_stocks)
+    stocks = ind_stocks[:50]
+
+    def _process(s):
         code = s.get("code")
         try:
             daily = df.get_kline(code, "daily", 120, "qfq")
             if daily is None or len(daily) < 30:
-                items.append({
+                return {
                     "code": code, "name": s.get("name"), "price": None,
                     "change_pct": None, "direction": "unknown", "strength": "weak",
                     "signals": [], "pats": [], "has_signal": False,
-                })
-                continue
+                }
             pats = scan_daily.detect_bullish(daily)
             strong_pats = [p for p in pats if p[2]]
             trend = an.analyze_trend(daily, "日线")
@@ -742,25 +750,33 @@ def api_industry_stocks(ind_name):
                 recent_high = max(daily["high"].tolist()[-20:])
                 if cur_price >= recent_high * 0.99 and float(daily.iloc[-2]["close"]) < recent_high:
                     signals.append("突破阻力")
-            items.append({
+            return {
                 "code": code, "name": s.get("name"), "price": round(cur_price, 2),
                 "change_pct": round((cur_price / float(daily.iloc[-2]["close"]) - 1) * 100, 2),
                 "direction": direction, "strength": trend.get("strength", "weak"),
                 "signals": signals, "pats": [p[0] for p in pats[:3]],
                 "has_signal": len(signals) > 0,
-            })
+            }
         except Exception:
-            items.append({
+            return {
                 "code": code, "name": s.get("name"), "price": None,
                 "change_pct": None, "direction": "unknown", "strength": "weak",
                 "signals": [], "pats": [], "has_signal": False,
-            })
-            continue
+            }
+
+    # 并行处理：最多12线程
+    from concurrent.futures import ThreadPoolExecutor
+    items = []
+    with ThreadPoolExecutor(max_workers=min(12, max(1, len(stocks)))) as ex:
+        for it in ex.map(_process, stocks):
+            items.append(it)
     # 排序：有信号的排前面（按信号数量降序），没信号的排后面
     items.sort(key=lambda x: (len(x["signals"]) > 0, len(x["signals"])), reverse=True)
     with_signal = sum(1 for it in items if it["has_signal"])
-    return jsonify({"ok": True, "industry": ind_name, "total_in_ind": len(ind_stocks),
-                    "with_signal": with_signal, "items": items[:50]})
+    result = {"ok": True, "industry": ind_name, "total_in_ind": total_in_ind,
+              "with_signal": with_signal, "items": items[:50]}
+    INDUSTRY_STOCKS_CACHE[ind_name] = (time.time(), result)
+    return jsonify(result)
 
 
 if __name__ == "__main__":
