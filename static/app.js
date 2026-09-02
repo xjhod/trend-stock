@@ -1526,7 +1526,46 @@
   if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
   if (tabIndustry) tabIndustry.addEventListener("click", function () { switchTab("industry"); });
-  document.getElementById("hf-refresh").addEventListener("click", function () { loadHighfit(); });
+  document.getElementById("hf-refresh").addEventListener("click", function () { rebuildHighfitPool(); });
+  async function rebuildHighfitPool() {
+    const infoEl = document.getElementById("hf-count");
+    const box = document.getElementById("hf-list");
+    if (!confirm("确定要重建高适配池吗？\n\n将按30亿市值门槛重新筛选全A股，约需1-3分钟。\n重建后行业轮动、今日机会等功能都会使用新池子。")) return;
+    if (infoEl) infoEl.textContent = "正在重建高适配池（约1-3分钟）…";
+    if (box) box.innerHTML = '<div class="flat" style="color:var(--text-dim);font-size:12px;padding:20px 16px;text-align:center">正在从全A股筛选高适配股票…<br><br>市值门槛：30亿<br><span id="pool-build-prog" style="color:var(--accent)">准备中…</span><br><br>请稍候，不要关闭页面</div>';
+    try {
+      const res = await fetch("/api/pool/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: 30 })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (infoEl) infoEl.textContent = "重建失败：" + (data.msg || "未知错误");
+        return;
+      }
+      // 轮询进度
+      var poll = setInterval(function () {
+        fetch("/api/pool/progress").then(function (r) { return r.json(); }).then(function (st) {
+          var progEl = document.getElementById("pool-build-prog");
+          if (st.state === "done") {
+            clearInterval(poll);
+            hfData = null;
+            if (infoEl) infoEl.textContent = "重建完成！共 " + ((st.result && (st.result.total || st.result.count)) || "?") + " 只，正在加载…";
+            setTimeout(function () { loadHighfit(); }, 500);
+          } else if (st.state === "error") {
+            clearInterval(poll);
+            if (infoEl) infoEl.textContent = "重建失败：" + (st.msg || "未知错误");
+            if (box) box.innerHTML = '<div class="flat" style="color:var(--down);font-size:12px;padding:20px 16px">重建失败：' + (st.msg || "未知错误") + '<br><br>可稍后重试</div>';
+          } else {
+            if (progEl) progEl.textContent = (st.msg || "重建中…") + "（" + (st.progress || 0) + "%）";
+          }
+        }).catch(function () {});
+      }, 2000);
+    } catch (e) {
+      if (infoEl) infoEl.textContent = "重建失败：" + e.message;
+    }
+  }
   document.getElementById("scan-run").addEventListener("click", function () {
     const infoEl = document.getElementById("scan-info");
     if (infoEl) infoEl.textContent = "扫描中(约1-3分钟)…";

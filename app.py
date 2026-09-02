@@ -27,6 +27,7 @@ DEFAULT_WATCHLIST = ["600519", "000001", "300750", "601318", "000858"]
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 _lock = threading.Lock()
+POOL_BUILD_STATE = {"state": "idle", "msg": "", "progress": 0, "result": None}
 
 # ---------------------------------------------------------------
 # 工具
@@ -474,8 +475,9 @@ def api_pool_info():
     return jsonify(pool_manager.pool_info())
 @app.route("/api/pool/build", methods=["POST"])
 def api_pool_build():
-    """按市值门槛重建高适配池 + 行业指数（动态更新）。
+    """按市值门槛异步重建高适配池 + 行业指数（后台线程执行，立即返回）。
     阈值可选: {threshold: 30/50/100}，默认用配置值。会覆盖 highfit_pool.json。"""
+    global POOL_BUILD_STATE
     data = request.get_json(silent=True) or {}
     threshold = data.get("threshold")
     if threshold is None:
@@ -483,12 +485,34 @@ def api_pool_build():
     threshold = int(threshold)
     if threshold not in pool_manager.POOL_LIMIT:
         return jsonify({"ok": False, "msg": f"市值门槛仅支持 {sorted(pool_manager.POOL_LIMIT)} 亿"}), 400
-    try:
-        r = pool_manager.build_pool(threshold)
-        pool_manager.set_threshold(threshold)
-        return jsonify(r)
-    except Exception as e:
-        return jsonify({"ok": False, "msg": f"构建失败: {e}"}), 500
+    if POOL_BUILD_STATE["state"] == "running":
+        return jsonify({"ok": True, "started": False, "running": True, "msg": "已有重建任务在进行中"})
+    def _job():
+        global POOL_BUILD_STATE
+        try:
+            POOL_BUILD_STATE = {"state": "running", "msg": "正在从全A股筛选高适配股票…", "progress": 5, "result": None}
+            def _progress(stage, msg):
+                POOL_BUILD_STATE["msg"] = msg
+                # 从msg中提取进度，如"评估中 80/4500…"
+                import re as _re
+                _m = _re.search(r'(\d+)/(\d+)', msg or "")
+                if _m:
+                    POOL_BUILD_STATE["progress"] = min(95, int(int(_m.group(1)) / int(_m.group(2)) * 90) + 5)
+                else:
+                    POOL_BUILD_STATE["progress"] = 10
+            r = pool_manager.build_pool(threshold, progress=_progress)
+            pool_manager.set_threshold(threshold)
+            POOL_BUILD_STATE = {"state": "done", "msg": "重建完成", "progress": 100, "result": r}
+        except Exception as e:
+            POOL_BUILD_STATE = {"state": "error", "msg": f"构建失败: {e}", "progress": 0, "result": None}
+    threading.Thread(target=_job, daemon=True).start()
+    return jsonify({"ok": True, "started": True, "msg": "已开始重建高适配池（约1-3分钟），请等待进度完成"})
+
+
+@app.route("/api/pool/progress")
+def api_pool_progress():
+    """查询高适配池重建进度"""
+    return jsonify(POOL_BUILD_STATE)
 
 
 @app.route("/api/env", methods=["GET"])
