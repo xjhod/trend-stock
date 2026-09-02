@@ -26,7 +26,7 @@ if errorlevel 1 (
 )
 
 echo [1/3] 检查依赖...
-python -c "import flask, requests, pandas, numpy" >nul 2>nul
+python -c "import flask, requests, pandas, numpy, waitress" >nul 2>nul
 if errorlevel 1 (
     echo [2/3] 首次运行，正在安装依赖（约1-2分钟，请耐心等待）...
     python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple

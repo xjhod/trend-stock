@@ -784,18 +784,47 @@ if __name__ == "__main__":
     import socket as _socket
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
     print(f"趋势全景 启动: http://{_HOST}:5000")
-    # 单实例保护：若 5000 端口已被占用，说明已有一个程序实例在运行，
-    # 直接退出，避免重复启动导致双实例叠加 CPU/内存占用。
+    # 单实例保护（PID锁文件 + 端口检测双保险）：
+    # 防止重复启动导致双实例叠加 CPU/内存占用。
+    _LOCK_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".app.pid")
+    def _pid_alive(pid):
+        try:
+            _os.kill(pid, 0)  # 发送信号0仅探测存活
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+        except Exception:
+            return False
+    _already_running = False
+    # 1) PID 锁文件
     try:
-        _probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-        _probe.settimeout(0.5)
-        _probe.connect((_HOST, 5000))
-        _probe.close()
-        print("检测到趋势全景已在运行（端口5000已被占用），本次不再重复启动。")
-        print("如需重启，请先关闭已运行的程序窗口，再重新打开。")
+        if _os.path.exists(_LOCK_FILE):
+            with open(_LOCK_FILE, encoding="utf-8") as _f:
+                _old_pid = int(_f.read().strip())
+            if _pid_alive(_old_pid):
+                _already_running = True
+    except Exception:
+        pass
+    # 2) 端口探测
+    if not _already_running:
+        try:
+            _probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            _probe.settimeout(0.5)
+            _probe.connect((_HOST, 5000))
+            _probe.close()
+            _already_running = True
+        except (OSError, Exception):
+            pass
+    if _already_running:
+        print("检测到趋势全景已在运行，本次不再重复启动（避免双实例占用CPU）。")
+        print("如需重启，请先双击 stop.bat 或关闭已运行的程序窗口，再重新打开。")
         _os._exit(0)
-    except (OSError, Exception):
-        pass  # 端口未被占用，正常启动
+    # 写入当前 PID
+    try:
+        with open(_LOCK_FILE, "w", encoding="utf-8") as _f:
+            _f.write(str(_os.getpid()))
+    except Exception:
+        pass
     # 自动确保大盘指数在自选股中（上证指数/深证成指）
     _wl = _load_watchlist()
     _added = False
@@ -814,7 +843,21 @@ if __name__ == "__main__":
     try:
         from waitress import serve
         print("使用 waitress 服务器（更省CPU）")
-        serve(app, host=_HOST, port=5000, threads=8)
+        try:
+            serve(app, host=_HOST, port=5000, threads=8)
+        finally:
+            try:
+                if _os.path.exists(_LOCK_FILE):
+                    _os.remove(_LOCK_FILE)
+            except Exception:
+                pass
     except ImportError:
         print("未安装 waitress，使用 Flask 内置服务器")
-        app.run(host=_HOST, port=5000, debug=False, threaded=True)
+        try:
+            app.run(host=_HOST, port=5000, debug=False, threaded=True)
+        finally:
+            try:
+                if _os.path.exists(_LOCK_FILE):
+                    _os.remove(_LOCK_FILE)
+            except Exception:
+                pass
