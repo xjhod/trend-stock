@@ -64,48 +64,64 @@ def _tencent_symbol(code):
 # 1. 实时行情（腾讯，可批量）
 # ---------------------------------------------------------------
 def get_realtime_quotes(codes):
-    """批量获取实时行情，返回 list[dict]"""
+    """批量获取实时行情，返回 list[dict]。分批（每批80只）并行请求，避免URL过长失败。"""
     if not codes:
         return []
-    q = ",".join(_tencent_symbol(c) for c in codes)
-    try:
-        r = requests.get(f"https://qt.gtimg.cn/q={q}", headers=HEADERS, timeout=5)
-        r.encoding = "gbk"
-    except Exception:
-        return []
-    result = []
-    for line in r.text.strip().split(";"):
-        line = line.strip()
-        if not line or "=" not in line:
-            continue
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    BATCH = 80
+    batches = [codes[i:i+BATCH] for i in range(0, len(codes), BATCH)]
+    def _fetch_batch(batch):
+        q = ",".join(_tencent_symbol(c) for c in batch)
         try:
-            val = line.split("=", 1)[1].strip().strip('"')
-            fields = val.split("~")
-            if len(fields) < 49:
-                continue
-            result.append({
-                "code": fields[2],
-                "name": fields[1],
-                "price": _f(fields[3]),
-                "pre_close": _f(fields[4]),
-                "open": _f(fields[5]),
-                "high": _f(fields[33]),
-                "low": _f(fields[34]),
-                "change": _f(fields[31]),
-                "pct_chg": _f(fields[32]),
-                "volume": _f(fields[36]),            # 手
-                "amount": _f(fields[37]) * 10000,    # 万元 -> 元
-                "turnover": _f(fields[38]),          # 换手率 %
-                "pe": _f(fields[39]),                # PE-TTM
-                "amplitude": _f(fields[43]),         # 振幅 %
-                "float_mv": _f(fields[44]) * 1e8,    # 流通市值 亿->元
-                "total_mv": _f(fields[45]) * 1e8,    # 总市值 亿->元
-                "pb": _f(fields[46]),                # 市净率
-                "limit_up": _f(fields[47]),
-                "limit_down": _f(fields[48]),
-            })
+            r = requests.get(f"https://qt.gtimg.cn/q={q}", headers=HEADERS, timeout=10)
+            r.encoding = "gbk"
+            return r.text
         except Exception:
-            continue
+            return ""
+    all_text = []
+    with ThreadPoolExecutor(max_workers=min(8, len(batches))) as ex:
+        futures = [ex.submit(_fetch_batch, b) for b in batches]
+        for f in as_completed(futures):
+            try:
+                t = f.result()
+                if t:
+                    all_text.append(t)
+            except Exception:
+                continue
+    result = []
+    for text in all_text:
+        for line in text.strip().split(";"):
+            line = line.strip()
+            if not line or "=" not in line:
+                continue
+            try:
+                val = line.split("=", 1)[1].strip().strip('"')
+                fields = val.split("~")
+                if len(fields) < 49:
+                    continue
+                result.append({
+                    "code": fields[2],
+                    "name": fields[1],
+                    "price": _f(fields[3]),
+                    "pre_close": _f(fields[4]),
+                    "open": _f(fields[5]),
+                    "high": _f(fields[33]),
+                    "low": _f(fields[34]),
+                    "change": _f(fields[31]),
+                    "pct_chg": _f(fields[32]),
+                    "volume": _f(fields[36]),
+                    "amount": _f(fields[37]) * 10000,
+                    "turnover": _f(fields[38]),
+                    "pe": _f(fields[39]),
+                    "amplitude": _f(fields[43]),
+                    "float_mv": _f(fields[44]) * 1e8,
+                    "total_mv": _f(fields[45]) * 1e8,
+                    "pb": _f(fields[46]),
+                    "limit_up": _f(fields[47]),
+                    "limit_down": _f(fields[48]),
+                })
+            except Exception:
+                continue
     return result
 
 
