@@ -18,13 +18,27 @@ RETRY = 6
 # 当日内存缓存：网络差时重复查看同一股票直接读缓存，秒开
 import datetime as _dt
 _CACHE = {}
+_CACHE_MAX = 600  # 缓存上限（防止扫描/浏览大量股票时内存无限增长）
+_CACHE_ORDER = []  # LRU 顺序
 def _cache_get(key):
     c = _CACHE.get(key)
     if c and c[0] == _dt.date.today().isoformat():
+        # 刷新 LRU 位置
+        try:
+            _CACHE_ORDER.remove(key)
+            _CACHE_ORDER.append(key)
+        except ValueError:
+            _CACHE_ORDER.append(key)
         return c[1]
     return None
 def _cache_set(key, val):
+    if key not in _CACHE:
+        _CACHE_ORDER.append(key)
     _CACHE[key] = (_dt.date.today().isoformat(), val)
+    # 超上限时淘汰最久未用的（只清理当天旧数据）
+    while len(_CACHE) > _CACHE_MAX and _CACHE_ORDER:
+        old_key = _CACHE_ORDER.pop(0)
+        _CACHE.pop(old_key, None)
 
 
 def _get_json(url, params=None, retry=RETRY, sleep=1.5, timeout=TIMEOUT):
@@ -79,7 +93,7 @@ def get_realtime_quotes(codes):
         except Exception:
             return ""
     all_text = []
-    with ThreadPoolExecutor(max_workers=min(8, len(batches))) as ex:
+    with ThreadPoolExecutor(max_workers=min(5, len(batches))) as ex:
         futures = [ex.submit(_fetch_batch, b) for b in batches]
         for f in as_completed(futures):
             try:

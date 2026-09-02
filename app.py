@@ -767,7 +767,7 @@ def api_industry_stocks(ind_name):
     # 并行处理：最多12线程
     from concurrent.futures import ThreadPoolExecutor
     items = []
-    with ThreadPoolExecutor(max_workers=min(12, max(1, len(stocks)))) as ex:
+    with ThreadPoolExecutor(max_workers=min(8, max(1, len(stocks)))) as ex:
         for it in ex.map(_process, stocks):
             items.append(it)
     # 排序：有信号的排前面（按信号数量降序），没信号的排后面

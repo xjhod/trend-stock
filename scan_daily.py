@@ -563,7 +563,7 @@ def _scan_one(it):
         return None
 
 
-def run_scan(limit=None, workers=8):
+def run_scan(limit=None, workers=4):
     """扫描高适配池, 返回信号列表并保存。同一时间只允许一次。"""
     global SCAN_THREAD
     if _last_scan["running"]:
