@@ -1898,23 +1898,41 @@
               .then(function (r2) {
                 if (r2 && r2.started) {
                   updShow("正在更新…<br><br><span id='upd-prog' style='color:var(--accent)'>准备中…</span>" +
-                    "<div style='margin-top:10px;font-size:11px;color:var(--text-dim)'>更新在后台进行，页面不会被卡住；完成后按提示重启软件即可。请勿在更新期间关闭页面。</div>");
+                    "<div style='margin-top:10px;font-size:11px;color:var(--text-dim)'>更新在后台进行，页面不会被卡住；完成后按提示重启软件即可。请勿在更新期间关闭页面。</div>" +
+                    "<div style='margin-top:14px;text-align:center'><button id='upd-done-manual' style='padding:6px 16px;border:1px solid var(--line,#d9d9d9);border-radius:6px;background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer'>已完成，去重启软件</button></div>");
                   go.style.display = "none";
+                  var updTimedOut = false;
+                  var updTimeout = setTimeout(function () {
+                    updTimedOut = true;
+                    var p = document.getElementById("upd-prog");
+                    if (p) p.innerHTML = "<span style='color:var(--down)'>更新已超过3分钟，文件大概率已替换完成</span><br>请关闭软件窗口后重新双击启动，即可使用最新版。";
+                  }, 180000);
+                  var manualBtn = document.getElementById("upd-done-manual");
+                  if (manualBtn) manualBtn.onclick = function () {
+                    clearInterval(poll);
+                    clearTimeout(updTimeout);
+                    updHide();
+                  };
                   var poll = setInterval(function () {
                     fetch("/api/update/progress").then(function (r) { return r.json(); }).then(function (st) {
                       var p = document.getElementById("upd-prog");
-                      if (!p) { clearInterval(poll); return; }
+                      if (!p) { clearInterval(poll); clearTimeout(updTimeout); return; }
                       if (st.state === "done") {
                         clearInterval(poll);
+                        clearTimeout(updTimeout);
                         updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
                       } else if (st.state === "error") {
                         clearInterval(poll);
+                        clearTimeout(updTimeout);
                         updShow("更新失败：" + st.msg + "<br><br>可稍后重试或检查网络。");
                         go.style.display = ""; go.disabled = false; go.textContent = "重新更新";
                       } else {
-                        p.textContent = st.msg;
+                        if (!updTimedOut) p.textContent = st.msg;
                       }
-                    }).catch(function () {});
+                    }).catch(function () {
+                      var p = document.getElementById("upd-prog");
+                      if (p && !updTimedOut) p.textContent = "网络波动，继续等待…（文件可能已在后台替换中）";
+                    });
                   }, 2000);
                 } else {
                   updShow("更新失败：" + ((r2 && r2.msg) || "未知错误"));
