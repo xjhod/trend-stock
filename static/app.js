@@ -2020,28 +2020,35 @@
     const stocksListEl = document.getElementById("ind-stocks-list");
     if (listEl) listEl.style.display = "none";
     if (stocksEl) stocksEl.style.display = "";
-    if (titleEl) titleEl.textContent = indName + " · 强信号个股";
     if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载中…</li>';
     try {
       const res = await fetch("/api/industry/" + encodeURIComponent(indName) + "/stocks");
       const data = await res.json();
       if (!data.ok) throw new Error(data.msg || "加载失败");
+      const withSig = data.with_signal || 0;
+      const total = data.total_in_ind || 0;
+      if (titleEl) titleEl.textContent = indName + " · 全部个股（" + withSig + "只有信号 / " + total + "只）";
       stocksListEl.innerHTML = "";
       if (!data.items || !data.items.length) {
-        stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">该行业暂无可识别的强信号个股</li>';
+        stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">该行业暂无高适配股票</li>';
         return;
       }
       (data.items || []).forEach(function (s) {
         const li = document.createElement("li");
-        const sigText = (s.signals || []).join(" · ");
+        const hasSig = s.has_signal && (s.signals || []).length > 0;
+        const sigText = hasSig ? (s.signals || []).join(" · ") : "无强信号";
+        const priceText = s.price != null ? fmt(s.price) : "--";
+        const chgText = s.change_pct != null ? (sign(s.change_pct) + fmt(s.change_pct) + "%") : "--";
+        const chgCls = s.change_pct != null ? cls(s.change_pct) : "";
+        li.style.opacity = hasSig ? "1" : "0.5";
         li.innerHTML =
           '<div class="wl-main">' +
-            '<div class="wl-name">' + s.name + '</div>' +
-            '<div class="wl-code" style="font-size:10px;color:var(--text-dim)">' + sigText + '</div>' +
+            '<div class="wl-name">' + (hasSig ? "★ " : "") + s.name + '</div>' +
+            '<div class="wl-code" style="font-size:10px;color:' + (hasSig ? 'var(--text-dim)' : '#666') + '">' + sigText + '</div>' +
           '</div>' +
           '<div class="wl-price">' +
-            '<div class="p ' + cls(s.change_pct) + '">' + fmt(s.price) + '</div>' +
-            '<div class="c ' + cls(s.change_pct) + '">' + sign(s.change_pct) + fmt(s.change_pct) + '%</div>' +
+            '<div class="p ' + chgCls + '">' + priceText + '</div>' +
+            '<div class="c ' + chgCls + '">' + chgText + '</div>' +
           '</div>';
         li.addEventListener("click", function () { selectStock(s.code); });
         stocksListEl.appendChild(li);

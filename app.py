@@ -680,7 +680,7 @@ def api_industry_trend():
 
 @app.route("/api/industry/<ind_name>/stocks")
 def api_industry_stocks(ind_name):
-    """返回指定行业内有强信号的高适配股票"""
+    """返回指定行业内全部高适配股票（有强信号的排前面，没信号的也显示）"""
     import urllib.parse
     ind_name = urllib.parse.unquote(ind_name)
     try:
@@ -697,6 +697,11 @@ def api_industry_stocks(ind_name):
         try:
             daily = df.get_kline(code, "daily", 120, "qfq")
             if daily is None or len(daily) < 30:
+                items.append({
+                    "code": code, "name": s.get("name"), "price": None,
+                    "change_pct": None, "direction": "unknown", "strength": "weak",
+                    "signals": [], "pats": [], "has_signal": False,
+                })
                 continue
             pats = scan_daily.detect_bullish(daily)
             strong_pats = [p for p in pats if p[2]]
@@ -712,17 +717,25 @@ def api_industry_stocks(ind_name):
                 recent_high = max(daily["high"].tolist()[-20:])
                 if cur_price >= recent_high * 0.99 and float(daily.iloc[-2]["close"]) < recent_high:
                     signals.append("突破阻力")
-            if signals:
-                items.append({
-                    "code": code, "name": s.get("name"), "price": round(cur_price, 2),
-                    "change_pct": round((cur_price / float(daily.iloc[-2]["close"]) - 1) * 100, 2),
-                    "direction": direction, "strength": trend.get("strength", "weak"),
-                    "signals": signals, "pats": [p[0] for p in pats[:3]],
-                })
+            items.append({
+                "code": code, "name": s.get("name"), "price": round(cur_price, 2),
+                "change_pct": round((cur_price / float(daily.iloc[-2]["close"]) - 1) * 100, 2),
+                "direction": direction, "strength": trend.get("strength", "weak"),
+                "signals": signals, "pats": [p[0] for p in pats[:3]],
+                "has_signal": len(signals) > 0,
+            })
         except Exception:
+            items.append({
+                "code": code, "name": s.get("name"), "price": None,
+                "change_pct": None, "direction": "unknown", "strength": "weak",
+                "signals": [], "pats": [], "has_signal": False,
+            })
             continue
-    items.sort(key=lambda x: len(x["signals"]), reverse=True)
-    return jsonify({"ok": True, "industry": ind_name, "total_in_ind": len(ind_stocks), "with_signal": len(items), "items": items[:30]})
+    # 排序：有信号的排前面（按信号数量降序），没信号的排后面
+    items.sort(key=lambda x: (len(x["signals"]) > 0, len(x["signals"])), reverse=True)
+    with_signal = sum(1 for it in items if it["has_signal"])
+    return jsonify({"ok": True, "industry": ind_name, "total_in_ind": len(ind_stocks),
+                    "with_signal": with_signal, "items": items[:50]})
 
 
 if __name__ == "__main__":
