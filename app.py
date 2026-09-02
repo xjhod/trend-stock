@@ -781,8 +781,21 @@ def api_industry_stocks(ind_name):
 
 if __name__ == "__main__":
     import os as _os
+    import socket as _socket
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
     print(f"趋势全景 启动: http://{_HOST}:5000")
+    # 单实例保护：若 5000 端口已被占用，说明已有一个程序实例在运行，
+    # 直接退出，避免重复启动导致双实例叠加 CPU/内存占用。
+    try:
+        _probe = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        _probe.settimeout(0.5)
+        _probe.connect((_HOST, 5000))
+        _probe.close()
+        print("检测到趋势全景已在运行（端口5000已被占用），本次不再重复启动。")
+        print("如需重启，请先关闭已运行的程序窗口，再重新打开。")
+        _os._exit(0)
+    except (OSError, Exception):
+        pass  # 端口未被占用，正常启动
     # 自动确保大盘指数在自选股中（上证指数/深证成指）
     _wl = _load_watchlist()
     _added = False
@@ -797,4 +810,11 @@ if __name__ == "__main__":
     scan_daily.schedule_daily(15, 35)
     threading.Timer(3, scan_daily.maybe_scan_on_startup).start()
     print("趋势全景股票分析服务启动: http://127.0.0.1:5000")
-    app.run(host=_HOST, port=5000, debug=False, threaded=True)
+    # 优先使用 waitress（生产级服务器，比 Flask 开发服务器省 CPU）；未安装则回退 Flask
+    try:
+        from waitress import serve
+        print("使用 waitress 服务器（更省CPU）")
+        serve(app, host=_HOST, port=5000, threads=8)
+    except ImportError:
+        print("未安装 waitress，使用 Flask 内置服务器")
+        app.run(host=_HOST, port=5000, debug=False, threaded=True)
