@@ -32,6 +32,16 @@ def _cache_get(key):
         return c[1]
     return None
 def _cache_set(key, val):
+    # 空数据不缓存：避免某次数据源抖动返回空后，当天一直读到空缓存（前端显示"暂无数据"且不自动恢复）
+    try:
+        if val is None:
+            return
+        if hasattr(val, "empty") and val.empty:
+            return
+        if isinstance(val, (list, dict)) and not val:
+            return
+    except Exception:
+        pass
     if key not in _CACHE:
         _CACHE_ORDER.append(key)
     _CACHE[key] = (_dt.date.today().isoformat(), val)
