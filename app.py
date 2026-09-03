@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.8.6"
+_BACKEND_VERSION = "1.8.7"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -735,6 +735,36 @@ def api_industry_stocks(ind_name):
     total_in_ind = len(ind_stocks)
     stocks = ind_stocks[:50]
 
+    # 行业指数近30日序列（用于与个股走势对比，判断行业是否已在高点/末期）
+    ind_map = {}
+    ind_dates = []
+    try:
+        _ind_rows = layers._load_ind_cache().get(ind_name, [])
+        ind_map = {r["date"]: float(r["close"]) for r in _ind_rows}
+        ind_dates = [r["date"] for r in _ind_rows[-60:]]
+    except Exception:
+        pass
+
+    def _ind_series(daily):
+        """个股近30日close + 按日期对齐的行业指数close（行业缺失时用最近前值）"""
+        d30 = daily.tail(30)
+        dates = d30["date"].tolist()
+        stock = [float(x) for x in d30["close"].tolist()]
+        ind = []
+        last_val = None
+        for dt in dates:
+            val = ind_map.get(dt)
+            if val is None:
+                for rd in reversed(ind_dates):
+                    if rd <= dt:
+                        val = ind_map.get(rd)
+                        if val is not None:
+                            break
+            if val is not None:
+                last_val = val
+            ind.append(round(last_val, 4) if last_val is not None else None)
+        return stock, ind
+
     def _process(s):
         code = s.get("code")
         try:
@@ -744,6 +774,7 @@ def api_industry_stocks(ind_name):
                     "code": code, "name": s.get("name"), "price": None,
                     "change_pct": None, "direction": "unknown", "strength": "weak",
                     "signals": [], "pats": [], "has_signal": False,
+                    "spark_stock": [], "spark_ind": [],
                 }
             pats = scan_daily.detect_bullish(daily)
             strong_pats = [p for p in pats if p[2]]
@@ -759,12 +790,14 @@ def api_industry_stocks(ind_name):
                 recent_high = max(daily["high"].tolist()[-20:])
                 if cur_price >= recent_high * 0.99 and float(daily.iloc[-2]["close"]) < recent_high:
                     signals.append("突破阻力")
+            sk, ik = _ind_series(daily)
             return {
                 "code": code, "name": s.get("name"), "price": round(cur_price, 2),
                 "change_pct": round((cur_price / float(daily.iloc[-2]["close"]) - 1) * 100, 2),
                 "direction": direction, "strength": trend.get("strength", "weak"),
                 "signals": signals, "pats": [p[0] for p in pats[:3]],
                 "has_signal": len(signals) > 0,
+                "spark_stock": sk, "spark_ind": ik,
             }
         except Exception:
             return {

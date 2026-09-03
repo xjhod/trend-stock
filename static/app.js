@@ -2022,6 +2022,30 @@
     }
   }
 
+  // mini dual-line: stock(blue) vs industry(orange), start-normalized to 100
+  function sparkSVG(stock, ind, w, h) {
+    if (!stock || stock.length < 2) return "";
+    var norm = function (arr) { var base = arr[0] || 1; return arr.map(function (v) { return (v / base) * 100; }); };
+    var s = norm(stock);
+    var i = (ind && ind.length >= 2) ? norm(ind) : null;
+    var n = s.length, pad = 2;
+    var all = i ? s.concat(i) : s;
+    var minV = Math.min.apply(null, all), maxV = Math.max.apply(null, all);
+    var range = (maxV - minV) || 1;
+    var px = function (k) { return pad + k * (w - pad * 2) / (n - 1); };
+    var py = function (v) { return h - pad - (v - minV) / range * (h - pad * 2); };
+    var line = function (arr, color, wid) {
+      var d = "";
+      arr.forEach(function (v, k) { d += (k ? "L" : "M") + px(k).toFixed(1) + " " + py(v).toFixed(1); });
+      return '<path d="' + d + '" stroke="' + color + '" stroke-width="' + wid + '" fill="none"/>';
+    };
+    var html = '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">';
+    html += line(s, "#4da3ff", 1.5);
+    if (i) html += line(i, "#ff9f43", 1.3);
+    html += "</svg>";
+    return html;
+  }
+
   async function loadIndustryStocks(indName) {
     const listEl = document.getElementById("ind-list");
     const stocksEl = document.getElementById("ind-stocks");
@@ -2050,10 +2074,15 @@
         const chgText = s.change_pct != null ? (sign(s.change_pct) + fmt(s.change_pct) + "%") : "--";
         const chgCls = s.change_pct != null ? cls(s.change_pct) : "";
         li.style.opacity = hasSig ? "1" : "0.5";
+        var sparkHtml = (s.spark_stock && s.spark_stock.length >= 2)
+          ? '<div class="wl-spark" title="蓝线=个股走势  橙线=行业指数走势（起点归一化100，对比相对强弱）">' +
+              sparkSVG(s.spark_stock, s.spark_ind, 168, 38) + '</div>'
+          : '';
         li.innerHTML =
           '<div class="wl-main">' +
             '<div class="wl-name">' + (hasSig ? "★ " : "") + s.name + '</div>' +
             '<div class="wl-code" style="font-size:10px;color:' + (hasSig ? 'var(--text-dim)' : '#666') + '">' + sigText + '</div>' +
+            sparkHtml +
           '</div>' +
           '<div class="wl-price">' +
             '<div class="p ' + chgCls + '">' + priceText + '</div>' +

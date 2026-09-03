@@ -40,7 +40,9 @@ body {
 .rules-btn:hover { border-color:var(--accent); color:var(--accent); }
 
 .topbar-sub { color:var(--text-dim); font-size:13px; }
-.ver-badge { color:var(--accent,#4da3ff); background:rgba(77,163,255,.12); padding:1px 7px; border-radius:8px; font-size:11px; margin-left:6px; font-weight:600; }
+.wl-spark { margin-top:4px; line-height:0; opacity:.9; }
+.spark { display:block; background:rgba(20,26,35,.4); border-radius:4px; }
+ color:var(--accent,#4da3ff); background:rgba(77,163,255,.12); padding:1px 7px; border-radius:8px; font-size:11px; margin-left:6px; font-weight:600; }
 .topbar-right { margin-left:auto; font-size:12px; color:var(--text-dim); }
 
 /* ---------- 主体 ---------- */
