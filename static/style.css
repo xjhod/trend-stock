@@ -40,6 +40,9 @@ body {
 .rules-btn:hover { border-color:var(--accent); color:var(--accent); }
 
 .topbar-sub { color:var(--text-dim); font-size:13px; }
+.ind-spark-legend { display:flex; align-items:center; gap:10px; padding:6px 14px; font-size:11px; color:var(--text-dim); background:rgba(20,26,35,.5); border-bottom:1px solid rgba(255,255,255,.05); flex-wrap:wrap; }
+.ind-spark-legend .lg-dot { display:inline-block; width:10px; height:4px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+.ind-spark-legend .lg-tip { color:#888; }
 .wl-spark { margin-top:4px; line-height:0; opacity:.9; }
 .spark { display:block; background:rgba(20,26,35,.4); border-radius:4px; }
  color:var(--accent,#4da3ff); background:rgba(77,163,255,.12); padding:1px 7px; border-radius:8px; font-size:11px; margin-left:6px; font-weight:600; }

@@ -208,7 +208,9 @@ def _build_ind_cache(pool, klines):
                 for d, v in series.items() if len(v) >= 5]
         rows.sort(key=lambda x: x["date"])
         if len(rows) >= 100:
-            ind_cache[ind] = rows
+            # 合成后清洗异常跳变（防止数据源异常写入坏点，导致行业指数虚高/虚低）
+            from layers import _clean_ind_series
+            ind_cache[ind] = _clean_ind_series(rows)
     return ind_cache
 
 

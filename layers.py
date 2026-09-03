@@ -26,13 +26,35 @@ def _load_all_a():
     return _all_a
 
 
+def _clean_ind_series(rows, max_chg=0.25):
+    """清洗行业指数异常跳变点：单日涨跌幅超过 25% 判定为数据异常
+    （行业等权指数由多只成分股合成，单日不可能波动超过 25%），用前一日值替代。
+    防止数据源异常导致行业指数虚高/虚低，进而让个股对比失真。"""
+    if not rows:
+        return rows
+    out = []
+    prev = None
+    for r in rows:
+        try:
+            v = float(r["close"])
+        except Exception:
+            continue
+        if prev is not None and prev != 0 and abs(v - prev) / prev > max_chg:
+            v = prev  # 异常跳变 → 用前一日值替代
+        out.append({"date": r["date"], "close": round(v, 4)})
+        prev = v
+    return out
+
+
 def _load_ind_cache():
     global _ind_cache
     if _ind_cache is None:
         try:
-            _ind_cache = json.load(open(IND_CACHE_FILE, encoding="utf-8"))
+            raw = json.load(open(IND_CACHE_FILE, encoding="utf-8"))
         except Exception:
-            _ind_cache = {}
+            raw = {}
+        # 读取即清洗异常跳变（历史坏缓存自动修复）
+        _ind_cache = {k: _clean_ind_series(v) for k, v in raw.items()}
     return _ind_cache
 
 
