@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.2"
+_BACKEND_VERSION = "1.9.3"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -930,7 +930,7 @@ if __name__ == "__main__":
         print("已自动添加上证指数/深证成指到自选股")
     # 每日收盘后(15:35)自动扫描 + 启动时补扫
     scan_daily.schedule_daily(15, 35)
-    threading.Timer(3, scan_daily.maybe_scan_on_startup).start()
+    threading.Timer(60, scan_daily.maybe_scan_on_startup).start()  # 延迟60秒扫描, 避免刚启动就看盘时CPU被吃满
     print("趋势全景股票分析服务启动: http://127.0.0.1:5000")
     # 优先使用 waitress（生产级服务器，比 Flask 开发服务器省 CPU）；未安装则回退 Flask
     try:
