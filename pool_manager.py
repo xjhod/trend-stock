@@ -215,16 +215,19 @@ def _build_ind_cache(pool, klines):
 
 
 def _merge_ind_cache(new_ind):
-    """合并行业指数：以原 ind_idx_cache 为基础，仅补充新池中缺失的行业"""
+    """重建行业指数：已有行业一律用当前 qfq 数据覆盖（保证复权口径一致），
+    仅保留新池缺失行业的旧数据兜底（防行业门卫失数据）。
+    历史 bug：旧实现只补缺失行业、从不覆盖已有行业，导致旧缓存错误口径
+    （不同复权/过时成分）持续污染行业指数，使行业涨幅/趋势判断失真。"""
     base = {}
     try:
         base = json.load(open(IND_CACHE_FILE, encoding="utf-8"))
     except Exception:
         base = {}
-    for ind, rows in new_ind.items():
-        if ind not in base and rows:
-            base[ind] = rows
-    return base
+    for ind in list(base):
+        if ind not in new_ind:
+            new_ind[ind] = base[ind]
+    return new_ind
 
 
 def pool_info():

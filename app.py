@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.8.9"
+_BACKEND_VERSION = "1.9.0"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -770,29 +770,45 @@ def api_industry_stocks(ind_name):
     total_in_ind = len(ind_stocks)
     stocks = ind_stocks[:50]
 
-    # 行业指数近30日序列（用于与个股走势对比，判断行业是否已在高点/末期）
-    ind_map = {}
-    ind_dates = []
+    # 行业指数近30日序列（用于与个股走势对比）。
+    # 关键修复：历史行业指数缓存口径过时（旧复权/旧成分），与个股 qfq 不一致，
+    # 导致行业橙线系统性虚高、个股蓝线被压低。这里改用「当前市值Top15成分股
+    # qfq K线」实时等权合成，与个股 spark_stock 完全同口径，对比才真实。
+    ind_spark_cache = {}
     try:
-        _ind_rows = layers._load_ind_cache().get(ind_name, [])
-        ind_map = {r["date"]: float(r["close"]) for r in _ind_rows}
-        ind_dates = [r["date"] for r in _ind_rows[-60:]]
+        _ind_top = sorted([s for s in pool if s.get("ind") == ind_name],
+                          key=lambda s: -s.get("mv", 0))[:15]
+        _series = {}
+        for _m in _ind_top:
+            try:
+                _dk = df.get_kline(_m.get("code"), "daily", 40, "qfq")
+                if _dk is None or len(_dk) < 31:
+                    continue
+                for _, _row in _dk.iterrows():
+                    _series.setdefault(str(_row["date"]), []).append(float(_row["close"]))
+            except Exception:
+                continue
+        if _series:
+            _rows = sorted([{"date": d, "close": sum(v) / len(v)}
+                            for d, v in _series.items() if len(v) >= 5], key=lambda x: x["date"])
+            ind_spark_cache = {r["date"]: r["close"] for r in _rows[-40:]}
     except Exception:
         pass
+    ind_dates = sorted(ind_spark_cache.keys())
 
     def _ind_series(daily):
-        """个股近30日close + 按日期对齐的行业指数close（行业缺失时用最近前值）"""
+        """个股近30日close + 按日期对齐的实时行业指数close（同口径，缺失用最近前值）"""
         d30 = daily.tail(30)
         dates = d30["date"].tolist()
         stock = [float(x) for x in d30["close"].tolist()]
         ind = []
         last_val = None
         for dt in dates:
-            val = ind_map.get(dt)
+            val = ind_spark_cache.get(dt)
             if val is None:
                 for rd in reversed(ind_dates):
                     if rd <= dt:
-                        val = ind_map.get(rd)
+                        val = ind_spark_cache.get(rd)
                         if val is not None:
                             break
             if val is not None:
