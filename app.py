@@ -7,6 +7,9 @@ import os
 import threading
 import time
 
+# 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
+_BACKEND_VERSION = "1.8.6"
+
 import pandas as pd
 from flask import Flask, jsonify, request
 
@@ -638,6 +641,12 @@ def api_positions_del(code):
     return jsonify(positions.remove_position(code))
 
 
+@app.route("/api/version")
+def api_version():
+    """返回后端实际运行的版本号（用于前端展示，便于排查后端是否已更新）"""
+    return jsonify({"ok": True, "version": _BACKEND_VERSION, "app": "趋势全景"})
+
+
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
@@ -799,8 +808,8 @@ if __name__ == "__main__":
     # 1) PID 锁文件
     try:
         if _os.path.exists(_LOCK_FILE):
-            with open(_LOCK_FILE, encoding="utf-8") as _f:
-                _old_pid = int(_f.read().strip())
+            with open(_LOCK_FILE, encoding="utf-8") as _lf:
+                _old_pid = int(_lf.read().strip())
             if _pid_alive(_old_pid):
                 _already_running = True
     except Exception:
@@ -821,8 +830,8 @@ if __name__ == "__main__":
         _os._exit(0)
     # 写入当前 PID
     try:
-        with open(_LOCK_FILE, "w", encoding="utf-8") as _f:
-            _f.write(str(_os.getpid()))
+        with open(_LOCK_FILE, "w", encoding="utf-8") as _lf:
+            _lf.write(str(_os.getpid()))
     except Exception:
         pass
     # 自动确保大盘指数在自选股中（上证指数/深证成指）

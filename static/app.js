@@ -2068,7 +2068,12 @@
   }
 
   // 行业轮动事件绑定
-  document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("DOMContentLoaded", function () {  // load backend version badge
+  fetch("/api/version").then(function (r) { return r.json(); }).then(function (d) {
+    var vb = document.getElementById("ver-badge");
+    if (vb && d && d.version) { vb.textContent = "v" + d.version; }
+  }).catch(function () {});
+
     const indRefresh = document.getElementById("ind-refresh");
     if (indRefresh) indRefresh.addEventListener("click", function () { loadIndustryTrend(); });
     const indBack = document.getElementById("ind-back");
