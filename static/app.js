@@ -2050,14 +2050,63 @@
     return html;
   }
 
+  // ---- 行业个股列表：分批渲染 + 滚动加载（避免一次性渲染大列表卡死浏览器）----
+  let indStocksData = null;      // 当前行业的完整个股数据
+  let indRenderCount = 0;        // 已渲染条数
+  let indStockEl = null;         // 列表容器引用
+  const IND_BATCH = 25;          // 每批渲染条数
+
+  function renderIndStocksBatch() {
+    if (!indStocksData) return;
+    const stocksListEl = indStockEl || document.getElementById("ind-stocks-list");
+    const items = indStocksData;
+    const start = indRenderCount;
+    const end = Math.min(start + IND_BATCH, items.length);
+    const frag = document.createDocumentFragment();
+    for (let k = start; k < end; k++) {
+      const s = items[k];
+      const li = document.createElement("li");
+      const hasSig = s.has_signal && (s.signals || []).length > 0;
+      const sigText = hasSig ? (s.signals || []).join(" · ") : "无强信号";
+      const priceText = s.price != null ? fmt(s.price) : "--";
+      const chgText = s.change_pct != null ? (sign(s.change_pct) + fmt(s.change_pct) + "%") : "--";
+      const chgCls = s.change_pct != null ? cls(s.change_pct) : "";
+      li.style.opacity = hasSig ? "1" : "0.5";
+      var sparkHtml = (s.spark_stock && s.spark_stock.length >= 2)
+        ? '<div class="wl-spark" title="蓝线=个股走势  橙线=行业指数走势（起点归一化100，对比相对强弱）">' +
+            sparkSVG(s.spark_stock, s.spark_ind, 168, 38) + '</div>'
+        : '';
+      li.innerHTML =
+        '<div class="wl-main">' +
+          '<div class="wl-name">' + (hasSig ? "★ " : "") + s.name + '</div>' +
+          '<div class="wl-code" style="font-size:10px;color:' + (hasSig ? 'var(--text-dim)' : '#666') + '">' + sigText + '</div>' +
+          sparkHtml +
+        '</div>' +
+        '<div class="wl-price">' +
+          '<div class="p ' + chgCls + '">' + priceText + '</div>' +
+          '<div class="c ' + chgCls + '">' + chgText + '</div>' +
+        '</div>';
+      li.addEventListener("click", (function (code) { return function () { selectStock(code); }; })(s.code));
+      frag.appendChild(li);
+    }
+    stocksListEl.appendChild(frag);
+    indRenderCount = end;
+    // 若容器尚未产生滚动（内容不足一屏），继续渲染直至填满或全部渲染完
+    if (indRenderCount < items.length && stocksListEl.scrollHeight <= stocksListEl.clientHeight + 2) {
+      renderIndStocksBatch();
+    }
+  }
+
   async function loadIndustryStocks(indName) {
     const listEl = document.getElementById("ind-list");
     const stocksEl = document.getElementById("ind-stocks");
     const titleEl = document.getElementById("ind-stocks-title");
     const stocksListEl = document.getElementById("ind-stocks-list");
+    indStockEl = stocksListEl;
     if (listEl) listEl.style.display = "none";
     if (stocksEl) stocksEl.style.display = "";
     if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载中…</li>';
+    indStocksData = null; indRenderCount = 0;
     try {
       const res = await fetch("/api/industry/" + encodeURIComponent(indName) + "/stocks");
       const data = await res.json();
@@ -2070,31 +2119,9 @@
         stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">该行业暂无高适配股票</li>';
         return;
       }
-      (data.items || []).forEach(function (s) {
-        const li = document.createElement("li");
-        const hasSig = s.has_signal && (s.signals || []).length > 0;
-        const sigText = hasSig ? (s.signals || []).join(" · ") : "无强信号";
-        const priceText = s.price != null ? fmt(s.price) : "--";
-        const chgText = s.change_pct != null ? (sign(s.change_pct) + fmt(s.change_pct) + "%") : "--";
-        const chgCls = s.change_pct != null ? cls(s.change_pct) : "";
-        li.style.opacity = hasSig ? "1" : "0.5";
-        var sparkHtml = (s.spark_stock && s.spark_stock.length >= 2)
-          ? '<div class="wl-spark" title="蓝线=个股走势  橙线=行业指数走势（起点归一化100，对比相对强弱）">' +
-              sparkSVG(s.spark_stock, s.spark_ind, 168, 38) + '</div>'
-          : '';
-        li.innerHTML =
-          '<div class="wl-main">' +
-            '<div class="wl-name">' + (hasSig ? "★ " : "") + s.name + '</div>' +
-            '<div class="wl-code" style="font-size:10px;color:' + (hasSig ? 'var(--text-dim)' : '#666') + '">' + sigText + '</div>' +
-            sparkHtml +
-          '</div>' +
-          '<div class="wl-price">' +
-            '<div class="p ' + chgCls + '">' + priceText + '</div>' +
-            '<div class="c ' + chgCls + '">' + chgText + '</div>' +
-          '</div>';
-        li.addEventListener("click", function () { selectStock(s.code); });
-        stocksListEl.appendChild(li);
-      });
+      indStocksData = data.items;
+      indRenderCount = 0;
+      renderIndStocksBatch();
     } catch (e) {
       if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载失败：' + e.message + '</li>';
     }
@@ -2112,8 +2139,17 @@
     const indBack = document.getElementById("ind-back");
     if (indBack) indBack.addEventListener("click", function () {
       currentInd = null;
+      indStocksData = null; indRenderCount = 0;
       document.getElementById("ind-stocks").style.display = "none";
       document.getElementById("ind-list").style.display = "";
+    });
+    // 行业个股列表：滚动接近底部时自动追加下一批（分批渲染防卡顿）
+    const indStocksList = document.getElementById("ind-stocks-list");
+    if (indStocksList) indStocksList.addEventListener("scroll", function () {
+      if (!indStocksData || indRenderCount >= indStocksData.length) return;
+      if (this.scrollTop + this.clientHeight >= this.scrollHeight - 60) {
+        renderIndStocksBatch();
+      }
     });
   });
 
