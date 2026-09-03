@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.8.8"
+_BACKEND_VERSION = "1.8.9"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -553,7 +553,32 @@ def api_update_check():
 
 
 # ---------------- 在线更新（异步后台执行，避免下载时阻塞服务导致浏览器卡死） ----------------
-UPDATE_STATE = {"state": "idle", "msg": "", "progress": 0, "replaced": []}
+UPDATE_STATE = {"state": "idle", "msg": "", "progress": 0, "replaced": [], "restart": False}
+
+
+def _auto_restart():
+    """更新完成后自动重启：删除PID锁 -> 拉起新进程 -> 退出旧进程。
+    避免用户每次都要手动关窗口再重新双击启动。"""
+    import subprocess
+    import sys
+    _lock = os.path.join(BASE_DIR, ".app.pid")
+    try:
+        os.remove(_lock)
+    except Exception:
+        pass
+    try:
+        if os.name == "nt":
+            # Windows：开新控制台窗口运行（与双击启动体验一致）
+            subprocess.Popen([sys.executable, "app.py"], cwd=BASE_DIR,
+                             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NEW_CONSOLE,
+                             close_fds=True)
+        else:
+            # 非 Windows（如测试沙箱）：后台分离运行
+            subprocess.Popen([sys.executable, "app.py"], cwd=BASE_DIR,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    except Exception:
+        pass
+    os._exit(0)
 
 def _start_async_update(url):
     UPDATE_STATE["state"] = "running"
@@ -570,6 +595,9 @@ def _start_async_update(url):
                 UPDATE_STATE["progress"] = 100
                 UPDATE_STATE["msg"] = result.get("msg", "更新完成")
                 UPDATE_STATE["replaced"] = result.get("replaced", [])
+                UPDATE_STATE["restart"] = True
+                # 3 秒后自动重启（让前端有时间提示用户）
+                threading.Timer(3, _auto_restart).start()
             else:
                 UPDATE_STATE["state"] = "error"
                 UPDATE_STATE["msg"] = result.get("msg", "更新失败")
@@ -593,6 +621,13 @@ def api_update_apply():
 def api_update_progress():
     """查询后台更新进度"""
     return jsonify(UPDATE_STATE)
+
+
+@app.route("/api/restart", methods=["POST"])
+def api_restart():
+    """手动触发自动重启（备用：正常情况下更新完成后会自动重启）"""
+    threading.Timer(1, _auto_restart).start()
+    return jsonify({"ok": True, "msg": "正在自动重启…"})
 
 
 # ---------------- 模拟持仓 ----------------

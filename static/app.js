@@ -1902,7 +1902,11 @@
                       if (st.state === "done") {
                         clearInterval(poll);
                         clearTimeout(updTimeout);
-                        updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
+                        if (st.restart) {
+                          updShow("✅ " + st.msg + "<br><br><span style='color:var(--accent)'>3 秒后自动重启，请稍候…</span><br><span style='font-size:11px;color:var(--text-dim)'>重启后请刷新或重新打开本页面，顶部版本号应显示最新版。</span>");
+                        } else {
+                          updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
+                        }
                       } else if (st.state === "error") {
                         clearInterval(poll);
                         clearTimeout(updTimeout);
