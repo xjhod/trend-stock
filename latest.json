@@ -1,5 +1,5 @@
 {
-  "version": "1.8.4",
-  "note": "CPU高占用再修复（重要）：1）单实例保护升级为 PID锁文件+端口检测双保险，彻底杜绝重复启动双实例（已实测：单实例空闲时CPU仅4%，双实例会叠加到60%+）；2）新增 stop.bat 一键停止脚本——双击确认后结束所有Python进程，之后再重新打开程序即可恢复干净单实例；3）start.bat 依赖检查加入 waitress，确保用生产级服务器。请务必用 stop.bat 清一次旧进程再重开。",
+  "version": "1.8.5",
+  "note": "修复K线加载失败：东方财富K线接口（push2his.eastmoney.com）已失效导致K线全部加载失败。新增腾讯K线作为第三数据源，形成「东财→新浪→腾讯」三级自动回退，腾讯接口用独立浏览器UA+限流重试，保证至少一个数据源可用。行情、自选股不受影响。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

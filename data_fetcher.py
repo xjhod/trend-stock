@@ -209,11 +209,70 @@ def _kline_from_sina(code, period="daily", limit=300):
     return pd.DataFrame()
 
 
+def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
+    """腾讯 K 线（前复权/后复权/不复权）。作为最后兜底源（东财/新浪都不通时）。
+    返回 DataFrame（列同其他源）；失败返回空。
+    腾讯接口偶发 501 限流，用独立浏览器 UA + 腾讯 Referer + 重试3次。"""
+    klt = {"daily": "day", "weekly": "week", "monthly": "month"}.get(period, "day")
+    sym = _tencent_symbol(code)
+    _hdr = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Referer": "https://gu.qq.com/",
+    }
+    try:
+        if adjust in ("qfq", "hfq"):
+            url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+            params = {"param": f"{sym},{klt},,{limit},{adjust}"}
+        else:
+            url = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
+            params = {"param": f"{sym},{klt},,{limit}"}
+        lines = []
+        for i in range(4):
+            try:
+                r = requests.get(url, params=params, headers=_hdr, timeout=5)
+                if r.status_code != 200:
+                    time.sleep(1.0 + i)
+                    continue
+                d = r.json()
+                if not isinstance(d, dict) or d.get("code") != 0:
+                    time.sleep(1.0 + i)
+                    continue
+                node = (d.get("data") or {}).get(sym) or {}
+                # 腾讯返回列序: [date, open, close, high, low, volume]
+                key = "qfqday" if adjust == "qfq" else ("hfqday" if adjust == "hfq" else "day")
+                lines = node.get(key) or node.get("day") or []
+                if lines:
+                    break  # 拿到真实数据
+                time.sleep(1.5 + i)  # data为空=限流，等待后重试
+            except Exception:
+                time.sleep(1.0 + i)
+        if not lines:
+            return pd.DataFrame()
+        rows = []
+        for it in lines:
+            try:
+                rows.append({
+                    "date": str(it[0]), "open": float(it[1]), "close": float(it[2]),
+                    "high": float(it[3]), "low": float(it[4]), "volume": float(it[5]),
+                    "amount": 0.0, "amplitude": 0.0,
+                    "pct_chg": 0.0, "change": 0.0, "turnover": 0.0,
+                })
+            except Exception:
+                continue
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            return df.tail(limit)
+    except Exception:
+        pass
+    return pd.DataFrame()
+
+
 def get_kline(code, period="daily", limit=300, adjust="qfq"):
     """
     period: daily=日线(101) weekly=周线(102) monthly=月线(103)
     adjust: qfq=前复权 hfq=后复权 ""=不复权
-    优先东财（复权），失败自动回退新浪（不复权）
+    优先东财（复权），失败自动回退新浪（不复权）再回退腾讯（复权）
     """
     klt = {"daily": 101, "weekly": 102, "monthly": 103}.get(period, 101)
     fqt = {"qfq": 1, "hfq": 2, "": 0}.get(adjust, 1)
@@ -230,6 +289,8 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
     df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
     if df.empty:
         df = _kline_from_sina(code, period, limit)
+    if df.empty:
+        df = _kline_from_tencent(code, period, limit, adjust)
     _cache_set(ck, df)
     return df
 
