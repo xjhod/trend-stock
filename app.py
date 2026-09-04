@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.5"
+_BACKEND_VERSION = "1.9.6"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -435,9 +435,9 @@ def api_layers(code):
 # ---------------------------------------------------------------
 @app.route("/api/scan/run", methods=["POST"])
 def api_scan_run():
-    """立即扫描高适配池"""
+    """立即扫描高适配池（后台异步执行，前端轮询进度）"""
     try:
-        return jsonify(scan_daily.run_scan())
+        return jsonify(scan_daily.run_scan_async())
     except Exception as e:
         return jsonify({"ok": False, "msg": f"扫描异常: {e}"}), 500
 

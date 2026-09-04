@@ -563,6 +563,19 @@ def _scan_one(it):
         return None
 
 
+def run_scan_async(limit=None, workers=4):
+    """后台线程扫描，立即返回，前端轮询进度。避免同步阻塞主服务。"""
+    if _last_scan["running"]:
+        return {"ok": False, "msg": "扫描进行中"}
+    def _work():
+        try:
+            run_scan(limit=limit, workers=workers)
+        except Exception as e:
+            _last_scan.update(running=False, ok=False, msg=f"扫描异常: {e}")
+    threading.Thread(target=_work, daemon=True).start()
+    return {"ok": True, "started": True, "msg": "已开始后台扫描"}
+
+
 def run_scan(limit=None, workers=4):
     """扫描高适配池, 返回信号列表并保存。同一时间只允许一次。"""
     global SCAN_THREAD

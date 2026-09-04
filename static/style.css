@@ -73,7 +73,10 @@ body.lowkey #lowkey-table { display:block !important; }
 /* 低调模式 + 点击个股（lowkey-hide-table）：显示K线详情，隐藏工作表 */
 body.lowkey.lowkey-hide-table #stock-view { display:block !important; }
 body.lowkey.lowkey-hide-table #lowkey-table { display:none !important; }
-body.lowkey.lowkey-hide-table #lowkey-bar { display:flex !important; }
+body.lowkey.lowkey-hide-table 
+.scan-done { color: var(--down); font-weight: 700; }
+
+#lowkey-bar { display:flex !important; }
 #lowkey-bar { align-items:center; gap:14px; padding:10px 22px; background:#ffffff; border-bottom:1px solid #d4d8de; font-size:12.5px; color:#69707a; }
 .lk-bar-back { background:#eef0f3; border:1px solid #d4d8de; color:#2d3239; padding:4px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
 .lk-bar-back:hover { border-color:#2f6fed; color:#2f6fed; }

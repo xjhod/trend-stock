@@ -1519,16 +1519,36 @@
       if (infoEl) infoEl.textContent = "重建失败：" + e.message;
     }
   }
-  document.getElementById("scan-run").addEventListener("click", function () {
+  // 扫描轮询：后台异步扫描，每2秒查一次进度，完成后自动刷新结果并提示
+  let scanPollTimer = null;
+  let scanJustDone = false;   // 标记本次列表刷新为"刚扫描完成"，用于显示✓提示
+  function stopScanPoll() { if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null; } }
+  function startScanPoll() {
     const infoEl = document.getElementById("scan-info");
+    const bar = document.getElementById("env-bar");
     if (infoEl) infoEl.textContent = "扫描中(约1-3分钟)…";
+    if (bar) { bar.style.display = ""; bar.className = "env-bar env-bad"; bar.innerHTML = "⏳ 正在扫描高适配池…完成后自动刷新结果"; }
+    stopScanPoll();
+    scanPollTimer = setInterval(function () {
+      fetch("/api/scan/status").then(r => r.json()).then(function (d) {
+        const st = d.status || {};
+        if (st.running) {
+          if (infoEl) infoEl.textContent = "扫描中… " + (st.msg || "");
+          if (bar) bar.innerHTML = "⏳ 扫描进行中… " + (st.msg || "");
+        } else {
+          stopScanPoll();
+          scanJustDone = true;
+          renderScanList();
+          showStatus("✓ 今日机会扫描完成，共 " + (d.signals || []).length + " 只信号");
+        }
+      }).catch(function () {});
+    }, 2000);
+  }
+  document.getElementById("scan-run").addEventListener("click", function () {
     fetch("/api/scan/run", { method: "POST" }).then(r => r.json()).then(function (d) {
-      if (d.ok) {
-        if (infoEl) infoEl.textContent = "扫描完成，机会 " + (d.signals || []).length + " 只";
-        renderEnvBar(d.env || null);
-        renderScanList();
-      } else if (infoEl) infoEl.textContent = d.msg || "扫描失败";
-    }).catch(function () { if (infoEl) infoEl.textContent = "扫描失败"; });
+      if (d.ok) startScanPoll();
+      else { const infoEl = document.getElementById("scan-info"); if (infoEl) infoEl.textContent = d.msg || "扫描失败"; }
+    }).catch(function () { const infoEl = document.getElementById("scan-info"); if (infoEl) infoEl.textContent = "扫描失败"; });
   });
 
   // ---------- 市场环境条 ----------
@@ -1556,9 +1576,18 @@
     fetch("/api/scan/status").then(r => r.json()).then(function (d) {
       const sigs = d.signals || [];
       const st = d.status || {};
-      if (infoEl) infoEl.textContent = (d.date ? d.date + " · " : "") + "机会 " + sigs.length + " 只" +
-        " · ★=信号强度（抄底最高2★；趋势3★=含周线确认的真趋势，2★以下=日线反弹短线）" +
-        (st.running ? " · 扫描中..." : (st.msg ? " · " + st.msg : ""));
+      if (infoEl) {
+        if (scanJustDone) {
+          infoEl.innerHTML = '<span class="scan-done">✓ 扫描完成</span> · 机会 ' + sigs.length + ' 只' +
+            (st.msg ? " · " + st.msg : "");
+          scanJustDone = false;
+        } else {
+          infoEl.textContent = (d.date ? d.date + " · " : "") + "机会 " + sigs.length + " 只" +
+            " · ★=信号强度（抄底最高2★；趋势3★=含周线确认的真趋势，2★以下=日线反弹短线）" +
+            (st.running ? " · 扫描中..." : (st.msg ? " · " + st.msg : ""));
+        }
+      }
+      if (st.running) startScanPoll();   // 扫描进行中则启动轮询显示进度
       renderEnvBar(d.env || null);
       if (!sigs.length) {
         listEl.innerHTML = '<div class="scan-empty">暂无符合条件的信号<br><span>大盘/行业震荡或未放量时规则不触发属正常。<br>点"▶ 扫描"可立即重跑。</span></div>';
