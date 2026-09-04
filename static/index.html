@@ -17,6 +17,7 @@
     <button class="rules-btn" onclick="window.__openRules()" title="所有规则与使用顺序">规则手册</button>
     <button class="rules-btn" onclick="window.__openConfig()" title="微信/短信推送配置与每日自动扫描">推送设置</button>
     <button class="rules-btn" onclick="window.__checkUpdate()" title="检查 GitHub 上的新版本并一键更新">检查更新</button>
+    <button class="rules-btn lowkey-btn" id="lowkey-btn" title="低调模式：切换成普通办公系统外观（Alt+Q）">低调</button>
     <div class="topbar-right" id="market-status"></div>
     <div class="mode-switch" id="mode-switch">
       <span class="env-badge" id="ms-score">--</span>
@@ -115,6 +116,8 @@
 
       <!-- 股票详情（加载后显示） -->
       <div class="stock-view" id="stock-view" style="display:none">
+        <!-- 低调模式：简洁工作表（上班伪装） -->
+        <div id="lowkey-table" style="display:none"></div>
         <!-- ① 股票信息栏 -->
         <div class="quote-bar" id="quote-bar"></div>
 
@@ -346,6 +349,6 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=42"></script>
+<script src="app.js?v=45"></script>
 </body>
 </html>
