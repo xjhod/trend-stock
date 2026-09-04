@@ -4,6 +4,8 @@
 不依赖 akshare，轻量稳定
 """
 import time
+import json
+import os
 import requests
 import pandas as pd
 
@@ -278,6 +280,71 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
     return pd.DataFrame()
 
 
+# ---------------------------------------------------------------
+# 数据源自适应探测: 检测当前网络哪些源可用, 把可用源排前面
+# 解决"某个源被屏蔽时每只股票都白等超时才回退"导致的扫描慢
+# ---------------------------------------------------------------
+_SOURCE_ORDER = None
+_SOURCE_ORDER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bt_data", "source_order.json")
+
+def _probe_sources():
+    """探测东财/新浪/腾讯连通性, 返回可用源顺序(可用在前). 当天缓存到文件, 进程内只探测一次."""
+    global _SOURCE_ORDER
+    if _SOURCE_ORDER is not None:
+        return _SOURCE_ORDER
+    # 先读当天缓存文件(避免每次启动都花几秒探测)
+    try:
+        with open(_SOURCE_ORDER_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        if d.get("date") == time.strftime("%Y-%m-%d") and d.get("order"):
+            _SOURCE_ORDER = d["order"]
+            return _SOURCE_ORDER
+    except Exception:
+        pass
+    order = []
+    params_base = {
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+        "ut": "7eea3edcaed734bea9cbfc24409ed989",
+        "beg": "20220101", "end": "20500101",
+    }
+    # 用贵州茅台(sh600519)短数据探测
+    try:
+        df = _kline_from_eastmoney("sh600519", 101, 1, params_base, 5)
+        if df is not None and not df.empty:
+            order.append("eastmoney")
+    except Exception:
+        pass
+    try:
+        df = _kline_from_sina("sh600519", "daily", 5)
+        if df is not None and not df.empty:
+            order.append("sina")
+    except Exception:
+        pass
+    try:
+        df = _kline_from_tencent("sh600519", "daily", 5, "qfq")
+        if df is not None and not df.empty:
+            order.append("tencent")
+    except Exception:
+        pass
+    if not order:
+        order = ["eastmoney", "sina", "tencent"]
+    # 写缓存文件(当天有效)
+    try:
+        os.makedirs(os.path.dirname(_SOURCE_ORDER_FILE), exist_ok=True)
+        with open(_SOURCE_ORDER_FILE, "w", encoding="utf-8") as f:
+            json.dump({"date": time.strftime("%Y-%m-%d"), "order": order}, f, ensure_ascii=False)
+    except Exception:
+        pass
+    _SOURCE_ORDER = order
+    return order
+
+
+def source_order():
+    """对外暴露当前数据源优先级(供诊断/界面显示)"""
+    return list(_probe_sources())
+
+
 def get_kline(code, period="daily", limit=300, adjust="qfq"):
     """
     period: daily=日线(101) weekly=周线(102) monthly=月线(103)
@@ -296,11 +363,19 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
     hit = _cache_get(ck)
     if hit is not None:
         return hit
-    df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
-    if df.empty:
-        df = _kline_from_sina(code, period, limit)
-    if df.empty:
-        df = _kline_from_tencent(code, period, limit, adjust)
+    # 按探测到的可用源顺序尝试(避免被屏蔽的源白等超时)
+    df = pd.DataFrame()
+    for src in _probe_sources():
+        if src == "eastmoney":
+            df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
+        elif src == "sina":
+            df = _kline_from_sina(code, period, limit)
+        elif src == "tencent":
+            df = _kline_from_tencent(code, period, limit, adjust)
+        if df is not None and not df.empty:
+            break
+    if df is None:
+        df = pd.DataFrame()
     _cache_set(ck, df)
     return df
 
@@ -358,6 +433,11 @@ def get_fund_flow(code, limit=60):
     hit = _cache_get(ck)
     if hit is not None:
         return hit
+    # 探测到东财不可用则直接新浪，避免每只都白等2.5s超时
+    if "eastmoney" not in _probe_sources():
+        df = _fund_flow_from_sina(code, limit)
+        _cache_set(ck, df)
+        return df
     # push2his 域名在部分网络下不稳定，快速失败后自动用新浪兜底
     try:
         data = _get_json(url, params, retry=1, sleep=0.2, timeout=2.5).get("data")
