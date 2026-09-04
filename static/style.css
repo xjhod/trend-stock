@@ -66,8 +66,18 @@ body.lowkey .lowkey-btn { border-color:#b9c0c9; color:#5b6470; }
 body.lowkey .lowkey-btn:hover { border-color:#2f6fed; color:#2f6fed; }
 body.lowkey .env-badge { background:rgba(47,111,237,.10); color:#2f6fed; }
 body.lowkey .topbar-right { color:#69707a; }
-body.lowkey #stock-view > *:not(#lowkey-table) { display:none !important; }
+/* 低调模式：默认隐藏空状态提示与K线详情，只显示简洁工作表 */
+body.lowkey #empty-state { display:none !important; }
+body.lowkey #stock-view { display:none !important; }
 body.lowkey #lowkey-table { display:block !important; }
+/* 低调模式 + 点击个股（lowkey-hide-table）：显示K线详情，隐藏工作表 */
+body.lowkey.lowkey-hide-table #stock-view { display:block !important; }
+body.lowkey.lowkey-hide-table #lowkey-table { display:none !important; }
+body.lowkey.lowkey-hide-table #lowkey-bar { display:flex !important; }
+#lowkey-bar { align-items:center; gap:14px; padding:10px 22px; background:#ffffff; border-bottom:1px solid #d4d8de; font-size:12.5px; color:#69707a; }
+.lk-bar-back { background:#eef0f3; border:1px solid #d4d8de; color:#2d3239; padding:4px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
+.lk-bar-back:hover { border-color:#2f6fed; color:#2f6fed; }
+
 body.lowkey .sidebar-foot { display:none; }
 body.lowkey #empty-state .empty-icon { display:none; }
 body.lowkey #empty-state .empty-sub { display:none; }

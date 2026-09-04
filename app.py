@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.4"
+_BACKEND_VERSION = "1.9.5"
 
 import pandas as pd
 from flask import Flask, jsonify, request

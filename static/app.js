@@ -77,83 +77,10 @@
           currentCode = null;
           document.getElementById("stock-view").style.display = "none";
           document.getElementById("empty-state").style.display = "flex";
+          if (document.body.classList.contains("lowkey")) document.body.classList.remove("lowkey-hide-table");
         }
       
-  // ---------- 低调模式：上班伪装成普通办公系统（Alt+Q 切换） ----------
-  const LOWKEY_TEXT = {
-    title: ["趋势全景 · 股票分析", "数据管理平台"],
-    logo: ['趋势<span class="logo-accent">全景</span>', '数据<span class="logo-accent">中心</span>'],
-    sub: ["A股 · 一屏看全价格与基本面趋势 ", "统一数据视图 · 内部使用 "]
-  };
-  const LOWKEY_TABS = {
-    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪",
-    "我的持仓": "登记台账", "行业轮动": "板块分析"
-  };
-  function renderLowkeyTable() {
-    const el = document.getElementById("lowkey-table");
-    if (!el) return;
-    const items = window.__wlData || [];
-    if (!items.length) {
-      el.innerHTML = '<div style="padding:40px;color:#69707a;font-size:13px">暂无数据</div>';
-      return;
-    }
-    let html = '<div style="padding:20px 28px">' +
-      '<div style="font-size:15px;font-weight:600;color:#2d3239;margin-bottom:14px">关注列表</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-      '<tr style="color:#69707a;text-align:left"><th style="padding:8px 10px;border-bottom:1px solid #d4d8de">名称</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de">代码</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">参考值</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">变动</th></tr>';
-    items.forEach(function (q) {
-      const c = q.pct_chg >= 0 ? "#2f6fed" : "#d9a113";
-      const sg = q.pct_chg >= 0 ? "+" : "";
-      html += '<tr><td style="padding:8px 10px;border-bottom:1px solid #eef0f3">' + q.name + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;color:#69707a">' + q.code + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right">' + (q.price != null ? fmt(q.price) : "--") + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right;color:' + c + '">' + (q.pct_chg != null ? sg + fmt(q.pct_chg) + '%' : "--") + '</td></tr>';
-    });
-    html += '</table></div>';
-    el.innerHTML = html;
-  }
-  function applyLowkey(on) {
-    document.body.classList.toggle("lowkey", on);
-    if (on) renderLowkeyTable();
-    else { const el = document.getElementById("lowkey-table"); if (el) el.innerHTML = ""; }
-    document.title = LOWKEY_TEXT.title[on ? 1 : 0];
-    const logo = document.querySelector(".logo");
-    if (logo) logo.innerHTML = LOWKEY_TEXT.logo[on ? 1 : 0];
-    const sub = document.querySelector(".topbar-sub");
-    if (sub) {
-      const nodes = sub.childNodes;
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].nodeType === 3) { nodes[i].textContent = LOWKEY_TEXT.sub[on ? 1 : 0]; break; }
-      }
-    }
-    document.querySelectorAll(".s-tab").forEach(function (t) {
-      let orig = t.getAttribute("data-orig");
-      if (!orig) { orig = t.textContent.trim(); t.setAttribute("data-orig", orig); }
-      let origT = t.getAttribute("data-title");
-      if (!origT) { origT = t.title || ""; t.setAttribute("data-title", origT); }
-      t.textContent = on ? (LOWKEY_TABS[orig] || orig) : orig;
-      t.title = on ? (origT.replace(orig, LOWKEY_TABS[orig] || orig)) : origT;
-    });
-    const btn = document.getElementById("lowkey-btn");
-    if (btn) btn.textContent = on ? "正常" : "低调";
-    try { localStorage.setItem("lowkey", on ? "1" : "0"); } catch (e) {}
-  }
-  const lowkeyBtn = document.getElementById("lowkey-btn");
-  if (lowkeyBtn) lowkeyBtn.addEventListener("click", function () {
-    applyLowkey(!document.body.classList.contains("lowkey"));
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.altKey && (e.key === "q" || e.key === "Q")) {
-      e.preventDefault();
-      applyLowkey(!document.body.classList.contains("lowkey"));
-    }
-  });
-  try { if (localStorage.getItem("lowkey") === "1") applyLowkey(true); } catch (e) {}
 
-  loadWatchlist();
 
       });
     });
@@ -219,81 +146,7 @@
       document.getElementById("import-modal").style.display = "none";
       showStatus("导入成功：识别到 " + data.added.length + " 只，自选股共 " + data.watchlist.length + " 只");
     
-  // ---------- 低调模式：上班伪装成普通办公系统（Alt+Q 切换） ----------
-  const LOWKEY_TEXT = {
-    title: ["趋势全景 · 股票分析", "数据管理平台"],
-    logo: ['趋势<span class="logo-accent">全景</span>', '数据<span class="logo-accent">中心</span>'],
-    sub: ["A股 · 一屏看全价格与基本面趋势 ", "统一数据视图 · 内部使用 "]
-  };
-  const LOWKEY_TABS = {
-    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪",
-    "我的持仓": "登记台账", "行业轮动": "板块分析"
-  };
-  function renderLowkeyTable() {
-    const el = document.getElementById("lowkey-table");
-    if (!el) return;
-    const items = window.__wlData || [];
-    if (!items.length) {
-      el.innerHTML = '<div style="padding:40px;color:#69707a;font-size:13px">暂无数据</div>';
-      return;
-    }
-    let html = '<div style="padding:20px 28px">' +
-      '<div style="font-size:15px;font-weight:600;color:#2d3239;margin-bottom:14px">关注列表</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-      '<tr style="color:#69707a;text-align:left"><th style="padding:8px 10px;border-bottom:1px solid #d4d8de">名称</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de">代码</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">参考值</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">变动</th></tr>';
-    items.forEach(function (q) {
-      const c = q.pct_chg >= 0 ? "#2f6fed" : "#d9a113";
-      const sg = q.pct_chg >= 0 ? "+" : "";
-      html += '<tr><td style="padding:8px 10px;border-bottom:1px solid #eef0f3">' + q.name + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;color:#69707a">' + q.code + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right">' + (q.price != null ? fmt(q.price) : "--") + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right;color:' + c + '">' + (q.pct_chg != null ? sg + fmt(q.pct_chg) + '%' : "--") + '</td></tr>';
-    });
-    html += '</table></div>';
-    el.innerHTML = html;
-  }
-  function applyLowkey(on) {
-    document.body.classList.toggle("lowkey", on);
-    if (on) renderLowkeyTable();
-    else { const el = document.getElementById("lowkey-table"); if (el) el.innerHTML = ""; }
-    document.title = LOWKEY_TEXT.title[on ? 1 : 0];
-    const logo = document.querySelector(".logo");
-    if (logo) logo.innerHTML = LOWKEY_TEXT.logo[on ? 1 : 0];
-    const sub = document.querySelector(".topbar-sub");
-    if (sub) {
-      const nodes = sub.childNodes;
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].nodeType === 3) { nodes[i].textContent = LOWKEY_TEXT.sub[on ? 1 : 0]; break; }
-      }
-    }
-    document.querySelectorAll(".s-tab").forEach(function (t) {
-      let orig = t.getAttribute("data-orig");
-      if (!orig) { orig = t.textContent.trim(); t.setAttribute("data-orig", orig); }
-      let origT = t.getAttribute("data-title");
-      if (!origT) { origT = t.title || ""; t.setAttribute("data-title", origT); }
-      t.textContent = on ? (LOWKEY_TABS[orig] || orig) : orig;
-      t.title = on ? (origT.replace(orig, LOWKEY_TABS[orig] || orig)) : origT;
-    });
-    const btn = document.getElementById("lowkey-btn");
-    if (btn) btn.textContent = on ? "正常" : "低调";
-    try { localStorage.setItem("lowkey", on ? "1" : "0"); } catch (e) {}
-  }
-  const lowkeyBtn = document.getElementById("lowkey-btn");
-  if (lowkeyBtn) lowkeyBtn.addEventListener("click", function () {
-    applyLowkey(!document.body.classList.contains("lowkey"));
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.altKey && (e.key === "q" || e.key === "Q")) {
-      e.preventDefault();
-      applyLowkey(!document.body.classList.contains("lowkey"));
-    }
-  });
-  try { if (localStorage.getItem("lowkey") === "1") applyLowkey(true); } catch (e) {}
 
-  loadWatchlist();
 
     } else {
       showStatus(data.msg || "导入失败");
@@ -317,81 +170,7 @@
     searchResult.classList.remove("open");
     if (data.ok) {
     
-  // ---------- 低调模式：上班伪装成普通办公系统（Alt+Q 切换） ----------
-  const LOWKEY_TEXT = {
-    title: ["趋势全景 · 股票分析", "数据管理平台"],
-    logo: ['趋势<span class="logo-accent">全景</span>', '数据<span class="logo-accent">中心</span>'],
-    sub: ["A股 · 一屏看全价格与基本面趋势 ", "统一数据视图 · 内部使用 "]
-  };
-  const LOWKEY_TABS = {
-    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪",
-    "我的持仓": "登记台账", "行业轮动": "板块分析"
-  };
-  function renderLowkeyTable() {
-    const el = document.getElementById("lowkey-table");
-    if (!el) return;
-    const items = window.__wlData || [];
-    if (!items.length) {
-      el.innerHTML = '<div style="padding:40px;color:#69707a;font-size:13px">暂无数据</div>';
-      return;
-    }
-    let html = '<div style="padding:20px 28px">' +
-      '<div style="font-size:15px;font-weight:600;color:#2d3239;margin-bottom:14px">关注列表</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-      '<tr style="color:#69707a;text-align:left"><th style="padding:8px 10px;border-bottom:1px solid #d4d8de">名称</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de">代码</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">参考值</th>' +
-      '<th style="padding:8px 10px;border-bottom:1px solid #d4d8de;text-align:right">变动</th></tr>';
-    items.forEach(function (q) {
-      const c = q.pct_chg >= 0 ? "#2f6fed" : "#d9a113";
-      const sg = q.pct_chg >= 0 ? "+" : "";
-      html += '<tr><td style="padding:8px 10px;border-bottom:1px solid #eef0f3">' + q.name + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;color:#69707a">' + q.code + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right">' + (q.price != null ? fmt(q.price) : "--") + '</td>' +
-        '<td style="padding:8px 10px;border-bottom:1px solid #eef0f3;text-align:right;color:' + c + '">' + (q.pct_chg != null ? sg + fmt(q.pct_chg) + '%' : "--") + '</td></tr>';
-    });
-    html += '</table></div>';
-    el.innerHTML = html;
-  }
-  function applyLowkey(on) {
-    document.body.classList.toggle("lowkey", on);
-    if (on) renderLowkeyTable();
-    else { const el = document.getElementById("lowkey-table"); if (el) el.innerHTML = ""; }
-    document.title = LOWKEY_TEXT.title[on ? 1 : 0];
-    const logo = document.querySelector(".logo");
-    if (logo) logo.innerHTML = LOWKEY_TEXT.logo[on ? 1 : 0];
-    const sub = document.querySelector(".topbar-sub");
-    if (sub) {
-      const nodes = sub.childNodes;
-      for (let i = 0; i < nodes.length; i++) {
-        if (nodes[i].nodeType === 3) { nodes[i].textContent = LOWKEY_TEXT.sub[on ? 1 : 0]; break; }
-      }
-    }
-    document.querySelectorAll(".s-tab").forEach(function (t) {
-      let orig = t.getAttribute("data-orig");
-      if (!orig) { orig = t.textContent.trim(); t.setAttribute("data-orig", orig); }
-      let origT = t.getAttribute("data-title");
-      if (!origT) { origT = t.title || ""; t.setAttribute("data-title", origT); }
-      t.textContent = on ? (LOWKEY_TABS[orig] || orig) : orig;
-      t.title = on ? (origT.replace(orig, LOWKEY_TABS[orig] || orig)) : origT;
-    });
-    const btn = document.getElementById("lowkey-btn");
-    if (btn) btn.textContent = on ? "正常" : "低调";
-    try { localStorage.setItem("lowkey", on ? "1" : "0"); } catch (e) {}
-  }
-  const lowkeyBtn = document.getElementById("lowkey-btn");
-  if (lowkeyBtn) lowkeyBtn.addEventListener("click", function () {
-    applyLowkey(!document.body.classList.contains("lowkey"));
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.altKey && (e.key === "q" || e.key === "Q")) {
-      e.preventDefault();
-      applyLowkey(!document.body.classList.contains("lowkey"));
-    }
-  });
-  try { if (localStorage.getItem("lowkey") === "1") applyLowkey(true); } catch (e) {}
 
-  loadWatchlist();
 
       if (data.code) selectStock(data.code);
     } else {
@@ -412,6 +191,8 @@
     document.getElementById("empty-state").style.display = "none";
     document.getElementById("stock-view").style.display = "block";
     document.getElementById("stock-view").scrollTop = 0;
+    // 低调模式下选中股票：隐藏工作表，正常显示K线详情
+    if (document.body.classList.contains("lowkey")) document.body.classList.add("lowkey-hide-table");
 
     // 加载
     document.getElementById("quote-bar").innerHTML =
@@ -2193,8 +1974,10 @@
       fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ market: { mode: sel.value } }) })
         .then(r => r.json()).then(function () {
-          showStatus("市场模式已切换为「" + label + "」，请到「今日机会」重新扫描");
+          showStatus("市场模式已切换为「" + label + "」，正在自动重新扫描…");
           loadModeSwitch();
+          const sr = document.getElementById("scan-run");
+          if (sr) sr.click();   // 切换模式后自动重扫，避免显示旧模式结果
         }).catch(function () { alert("切换失败，请重试"); });
     });
   }
@@ -2432,6 +2215,8 @@
   }
   function applyLowkey(on) {
     document.body.classList.toggle("lowkey", on);
+    // 低调模式始终默认显示工作表（不自动展开K线）；点个股才临时看详情
+    document.body.classList.remove("lowkey-hide-table");
     if (on) renderLowkeyTable();
     else { const el = document.getElementById("lowkey-table"); if (el) el.innerHTML = ""; }
     document.title = LOWKEY_TEXT.title[on ? 1 : 0];
@@ -2456,6 +2241,7 @@
     if (btn) btn.textContent = on ? "正常" : "低调";
     try { localStorage.setItem("lowkey", on ? "1" : "0"); } catch (e) {}
   }
+  window.__lowkeyBack = function () { document.body.classList.remove("lowkey-hide-table"); };
   const lowkeyBtn = document.getElementById("lowkey-btn");
   if (lowkeyBtn) lowkeyBtn.addEventListener("click", function () {
     applyLowkey(!document.body.classList.contains("lowkey"));

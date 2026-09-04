@@ -1,23 +1,23 @@
 @echo off
-chcp 65001 >nul
-title 趋势全景 · 一键停止
+title Trend Panorama - Stop
 echo ================================================
-echo    趋势全景 · 一键停止所有Python进程
+echo   Trend Panorama - Stop all Python processes
 echo ================================================
 echo.
-echo  此操作将结束所有 python.exe / pythonw.exe 进程。
-echo  仅当趋势全景是您电脑上唯一的 Python 程序时使用！
-echo  （如微信开发者工具/其他软件也用Python，请勿使用）
+echo   This will kill all python.exe / pythonw.exe
+echo   processes on this PC.
+echo   (Only use if Trend Panorama is the only Python
+echo    program running on this machine.)
 echo.
-set /p "yn=确认结束所有Python进程? (y/n): "
+set /p yn="Confirm kill all Python processes? (y/n): "
 if /i not "%yn%"=="y" (
-    echo 已取消。
+    echo Cancelled.
     pause
     exit /b
 )
 echo.
-echo 正在结束 Python 进程...
+echo Killing Python processes...
 taskkill /f /im python.exe >nul 2>nul
 taskkill /f /im pythonw.exe >nul 2>nul
-echo 完成。请重新双击「启动股票分析.bat」打开程序。
+echo Done. Please restart with "start.bat".
 pause

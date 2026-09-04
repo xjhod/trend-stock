@@ -1,46 +1,46 @@
 @echo off
 chcp 65001 >nul
-title è¶‹åŠ¿å…¨æ™¯ Â· è‚¡ç¥¨åˆ†æž
+title Ç÷ÊÆÈ«¾° ¡¤ ¹ÉÆ±·ÖÎö
 cd /d "%~dp0"
 
 echo ============================================
-echo    è¶‹åŠ¿å…¨æ™¯ Â· è‚¡ç¥¨åˆ†æžï¼ˆæœ¬åœ°ç‰ˆï¼‰
+echo    Ç÷ÊÆÈ«¾° ¡¤ ¹ÉÆ±·ÖÎö£¨±¾µØ°æ£©
 echo ============================================
 echo.
 
 if not exist "app.py" (
-    echo [é”™è¯¯] æ‰¾ä¸åˆ° app.pyï¼Œè¯·å…ˆå®Œæ•´è§£åŽ‹æ•´ä¸ªåŽ‹ç¼©åŒ…å†è¿è¡Œæœ¬æ–‡ä»¶ã€‚
-    echo å½“å‰ç›®å½•: %~dp0
+    echo [´íÎó] ÕÒ²»µ½ app.py£¬ÇëÏÈÍêÕû½âÑ¹Õû¸öÑ¹Ëõ°üÔÙÔËÐÐ±¾ÎÄ¼þ¡£
+    echo µ±Ç°Ä¿Â¼: %~dp0
     pause
     exit /b
 )
 
 where python >nul 2>nul
 if errorlevel 1 (
-    echo [é”™è¯¯] æœªæ£€æµ‹åˆ° Pythonã€‚
-    echo è¯·å…ˆå®‰è£… Python 3.10+ å¹¶å‹¾é€‰ "Add Python to PATH"ï¼š
-    echo   ä¸‹è½½åœ°å€: https://www.python.org/downloads/
-    echo   å®‰è£…æ—¶åŠ¡å¿…å‹¾é€‰ "Add Python to PATH"ï¼Œå¦åˆ™æ— æ³•å¯åŠ¨ã€‚
+    echo [´íÎó] Î´¼ì²âµ½ Python¡£
+    echo ÇëÏÈ°²×° Python 3.10+ ²¢¹´Ñ¡ "Add Python to PATH"£º
+    echo   ÏÂÔØµØÖ·: https://www.python.org/downloads/
+    echo   °²×°Ê±Îñ±Ø¹´Ñ¡ "Add Python to PATH"£¬·ñÔòÎÞ·¨Æô¶¯¡£
     pause
     exit /b
 )
 
-echo [1/3] æ£€æŸ¥ä¾èµ–...
+echo [1/3] ¼ì²éÒÀÀµ...
 python -c "import flask, requests, pandas, numpy, waitress" >nul 2>nul
 if errorlevel 1 (
-    echo [2/3] é¦–æ¬¡è¿è¡Œï¼Œæ­£åœ¨å®‰è£…ä¾èµ–ï¼ˆçº¦1-2åˆ†é’Ÿï¼Œè¯·è€å¿ƒç­‰å¾…ï¼‰...
+    echo [2/3] Ê×´ÎÔËÐÐ£¬ÕýÔÚ°²×°ÒÀÀµ£¨Ô¼1-2·ÖÖÓ£¬ÇëÄÍÐÄµÈ´ý£©...
     python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
-        echo [é”™è¯¯] ä¾èµ–å®‰è£…å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œåŽé‡è¯•ã€‚
+        echo [´íÎó] ÒÀÀµ°²×°Ê§°Ü£¬Çë¼ì²éÍøÂçºóÖØÊÔ¡£
         pause
         exit /b
     )
 )
 
-echo [3/3] æ­£åœ¨å¯åŠ¨æœåŠ¡ï¼Œå¹¶è‡ªåŠ¨æ‰“å¼€æµè§ˆå™¨...
+echo [3/3] ÕýÔÚÆô¶¯·þÎñ£¬²¢×Ô¶¯´ò¿ªä¯ÀÀÆ÷...
 echo.
-echo    å¦‚æžœæµè§ˆå™¨æ²¡æœ‰è‡ªåŠ¨æ‰“å¼€ï¼Œè¯·æ‰‹åŠ¨è®¿é—®:  http://127.0.0.1:5000
-echo    å…³é—­æœ¬çª—å£ = å…³é—­è½¯ä»¶
+echo    Èç¹ûä¯ÀÀÆ÷Ã»ÓÐ×Ô¶¯´ò¿ª£¬ÇëÊÖ¶¯·ÃÎÊ:  http://127.0.0.1:5000
+echo    ¹Ø±Õ±¾´°¿Ú = ¹Ø±ÕÈí¼þ
 echo ============================================
 start "" cmd /c "timeout /t 2 >nul & start http://127.0.0.1:5000"
 python app.py

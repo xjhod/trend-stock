@@ -116,8 +116,6 @@
 
       <!-- 股票详情（加载后显示） -->
       <div class="stock-view" id="stock-view" style="display:none">
-        <!-- 低调模式：简洁工作表（上班伪装） -->
-        <div id="lowkey-table" style="display:none"></div>
         <!-- ① 股票信息栏 -->
         <div class="quote-bar" id="quote-bar"></div>
 
@@ -181,6 +179,13 @@
         <!-- ⑦ 综合结论 -->
         <div class="conclusion" id="conclusion"></div>
       </div>
+
+      <!-- 低调模式：简洁工作表（上班伪装，默认显示；选中股票时临时显示K线详情） -->
+      <div id="lowkey-bar" style="display:none">
+        <span>低调模式 · 正在查看个股详情</span>
+        <button class="lk-bar-back" onclick="window.__lowkeyBack()">← 返回列表</button>
+      </div>
+      <div id="lowkey-table" style="display:none"></div>
     </section>
   </div>
 </div>
@@ -349,6 +354,6 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=45"></script>
+<script src="app.js?v=48"></script>
 </body>
 </html>
