@@ -235,7 +235,7 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
     try:
         if adjust in ("qfq", "hfq"):
             url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-            params = {"param": f"{sym},{klt},,{limit},{adjust}"}
+            params = {"param": f"{sym},{klt},,,{limit},{adjust}"}
         else:
             url = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
             params = {"param": f"{sym},{klt},,{limit}"}
@@ -316,15 +316,15 @@ def _probe_sources():
     except Exception:
         pass
     try:
-        df = _kline_from_sina("sh600519", "daily", 5)
-        if df is not None and not df.empty:
-            order.append("sina")
-    except Exception:
-        pass
-    try:
         df = _kline_from_tencent("sh600519", "daily", 5, "qfq")
         if df is not None and not df.empty:
             order.append("tencent")
+    except Exception:
+        pass
+    try:
+        df = _kline_from_sina("sh600519", "daily", 5)
+        if df is not None and not df.empty:
+            order.append("sina")
     except Exception:
         pass
     if not order:
