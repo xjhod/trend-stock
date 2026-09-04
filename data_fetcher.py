@@ -285,6 +285,7 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
 # 解决"某个源被屏蔽时每只股票都白等超时才回退"导致的扫描慢
 # ---------------------------------------------------------------
 _SOURCE_ORDER = None
+_PROBE_VERSION = "2"   # 探测逻辑版本, 变了就强制重新探测(避免旧缓存)
 _SOURCE_ORDER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bt_data", "source_order.json")
 
 def _probe_sources():
@@ -296,7 +297,8 @@ def _probe_sources():
     try:
         with open(_SOURCE_ORDER_FILE, encoding="utf-8") as f:
             d = json.load(f)
-        if d.get("date") == time.strftime("%Y-%m-%d") and d.get("order"):
+        if (d.get("date") == time.strftime("%Y-%m-%d")
+                and d.get("pv") == _PROBE_VERSION and d.get("order")):
             _SOURCE_ORDER = d["order"]
             return _SOURCE_ORDER
     except Exception:
@@ -333,7 +335,7 @@ def _probe_sources():
     try:
         os.makedirs(os.path.dirname(_SOURCE_ORDER_FILE), exist_ok=True)
         with open(_SOURCE_ORDER_FILE, "w", encoding="utf-8") as f:
-            json.dump({"date": time.strftime("%Y-%m-%d"), "order": order}, f, ensure_ascii=False)
+            json.dump({"date": time.strftime("%Y-%m-%d"), "order": order, "pv": _PROBE_VERSION}, f, ensure_ascii=False)
     except Exception:
         pass
     _SOURCE_ORDER = order
