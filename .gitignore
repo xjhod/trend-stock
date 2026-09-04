@@ -26,3 +26,4 @@ bt_data/*
 !bt_data/ind_idx_cache.json
 !bt_data/all_a.json
 source_order.json
+full_scan_time.py
