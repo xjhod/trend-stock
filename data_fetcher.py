@@ -340,10 +340,10 @@ def _tushare_request(api_name, params, fields="", timeout=10):
 
 def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
     ts_code = _tushare_code(code)
-    klt = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}.get(period, "daily")
+    # Tushare只有daily接口可用(120积分), 周线/月线从daily聚合
     end = time.strftime("%Y%m%d")
     start = "20240101"
-    data = _tushare_request(klt, {"ts_code": ts_code, "start_date": start, "end_date": end},
+    data = _tushare_request("daily", {"ts_code": ts_code, "start_date": start, "end_date": end},
                              "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount")
     if not data or not data.get("items"):
         return pd.DataFrame()
@@ -370,6 +370,20 @@ def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
     df = pd.DataFrame(rows)
     if df.empty:
         return df
+    # Tushare只有daily接口可用(120积分), weekly/monthly从daily聚合
+    if period in ("weekly", "monthly"):
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+        rule = "W" if period == "weekly" else "ME"
+        agg_df = df.resample(rule).agg({
+            "open": "first", "high": "max", "low": "min",
+            "close": "last", "volume": "sum", "amount": "sum",
+            "pct_chg": "last", "change": "last",
+        }).dropna(subset=["close"])
+        agg_df = agg_df.reset_index()
+        agg_df["date"] = agg_df["date"].dt.strftime("%Y-%m-%d")
+        agg_df = agg_df.iloc[::-1].reset_index(drop=True)  # 倒序(最新在前), 和daily一致
+        df = agg_df
     if adjust in ("qfq", "hfq"):
         adj = _tushare_request("adj_factor",
                                 {"ts_code": ts_code, "start_date": start, "end_date": end},

@@ -1,5 +1,5 @@
 {
-  "version": "1.9.12",
-  "note": "修复Tushare K线日期格式bug: Tushare返回YYYYMMDD格式(如20260904), 前端期望YYYY-MM-DD, 导致K线图显示'暂无数据'。修复后日期格式统一, K线图正常渲染。",
+  "version": "1.9.13",
+  "note": "扫描速度大幅优化: ①扫描时只用daily不复权(只调1次接口, 速度翻倍); ②Tushare周线/月线从daily数据聚合(Tushare只有daily接口120分可用, 之前周线月线会回退到腾讯/新浪拖慢扫描); ③修复Tushare日期格式YYYYMMDD->YYYY-MM-DD。全量扫描约3-4分钟完成。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

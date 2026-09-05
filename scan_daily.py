@@ -160,7 +160,7 @@ def _weekly_trend_up(code):
     返回 True=周线多头 / False=否 / None=数据不足
     """
     try:
-        wdf = get_kline(code, "weekly", 120, "qfq")
+        wdf = get_kline(code, "weekly", 120, "")
         if wdf is None or len(wdf) < 21:
             return None
         c = wdf["close"]
@@ -381,9 +381,9 @@ def _calc_rating(code, daily):
     def fetch(kind):
         try:
             if kind == "weekly":
-                return get_kline(code, "weekly", 120, "qfq")
+                return get_kline(code, "weekly", 120, "")
             if kind == "monthly":
-                return get_kline(code, "monthly", 80, "qfq")
+                return get_kline(code, "monthly", 80, "")
             if kind == "ff":
                 return get_fund_flow(code, limit=60)
             if kind == "fin":
@@ -420,7 +420,7 @@ def _scan_one(it):
     """
     code = it.get("code"); name = it.get("name", ""); ind = it.get("ind", "")
     try:
-        df = get_kline(code, "daily", 300, "qfq")
+        df = get_kline(code, "daily", 300, "")
         if df is None or len(df) < 60:
             return None
         trend = an.analyze_trend(df, "日线")
