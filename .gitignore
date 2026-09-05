@@ -27,3 +27,4 @@ bt_data/*
 !bt_data/all_a.json
 source_order.json
 full_scan_time.py
+tushare_token.txt

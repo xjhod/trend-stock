@@ -280,6 +280,113 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq", retry=4, 
     return pd.DataFrame()
 
 
+
+# ---------------------------------------------------------------
+# Tushare 数据源 (120积分可用: daily/adj_factor/stock_basic/daily_basic)
+# token 存在 tushare_token.txt (不进git/不进包, 用户本地配置)
+# ---------------------------------------------------------------
+_TUSHARE_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tushare_token.txt")
+_TUSHARE_TOKEN = None
+_TUSHARE_LAST_REQ = 0.0
+_TUSHARE_LOCK = None
+
+def _get_tushare_token():
+    global _TUSHARE_TOKEN
+    if _TUSHARE_TOKEN is not None:
+        return _TUSHARE_TOKEN
+    try:
+        with open(_TUSHARE_TOKEN_FILE, encoding="utf-8") as f:
+            _TUSHARE_TOKEN = f.read().strip()
+    except Exception:
+        _TUSHARE_TOKEN = ""
+    return _TUSHARE_TOKEN
+
+def _tushare_code(code):
+    """600519/sh600519 -> 600519.SH; 000001/sz000001 -> 000001.SZ;
+    sh000001(上证指数) -> 000001.SH(保留前缀判断, 避免和平安银行000001.SZ混淆)."""
+    c = code.lower()
+    if c.startswith("sh"):
+        return f"{c[2:]}.SH"
+    if c.startswith("sz"):
+        return f"{c[2:]}.SZ"
+    if c.startswith(("6", "9")):
+        return f"{c}.SH"
+    return f"{c}.SZ"
+
+def _tushare_request(api_name, params, fields="", timeout=10):
+    global _TUSHARE_LAST_REQ, _TUSHARE_LOCK
+    token = _get_tushare_token()
+    if not token:
+        return None
+    if _TUSHARE_LOCK is None:
+        import threading
+        _TUSHARE_LOCK = threading.Lock()
+    with _TUSHARE_LOCK:
+        elapsed = time.time() - _TUSHARE_LAST_REQ
+        if elapsed < 0.12:
+            time.sleep(0.12 - elapsed)
+        _TUSHARE_LAST_REQ = time.time()
+    try:
+        r = requests.post("http://api.tushare.pro",
+                          json={"api_name": api_name, "token": token,
+                                "params": params, "fields": fields},
+                          timeout=timeout)
+        d = r.json()
+        if d.get("code") == 0 and d.get("data"):
+            return d["data"]
+    except Exception:
+        pass
+    return None
+
+def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
+    ts_code = _tushare_code(code)
+    klt = {"daily": "daily", "weekly": "weekly", "monthly": "monthly"}.get(period, "daily")
+    end = time.strftime("%Y%m%d")
+    start = "20240101"
+    data = _tushare_request(klt, {"ts_code": ts_code, "start_date": start, "end_date": end},
+                             "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount")
+    if not data or not data.get("items"):
+        return pd.DataFrame()
+    fields = data["fields"]
+    items = data["items"]
+    rows = []
+    for it in items:
+        rec = dict(zip(fields, it))
+        try:
+            rows.append({
+                "date": rec["trade_date"], "open": float(rec["open"]),
+                "close": float(rec["close"]), "high": float(rec["high"]),
+                "low": float(rec["low"]), "volume": float(rec.get("vol", 0)),
+                "amount": float(rec.get("amount", 0)),
+                "pct_chg": float(rec.get("pct_chg", 0)),
+                "change": float(rec.get("change", 0)),
+                "amplitude": 0.0, "turnover": 0.0,
+            })
+        except Exception:
+            continue
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    if adjust in ("qfq", "hfq"):
+        adj = _tushare_request("adj_factor",
+                                {"ts_code": ts_code, "start_date": start, "end_date": end},
+                                "ts_code,trade_date,adj_factor")
+        if adj and adj.get("items"):
+            adj_map = {it[1]: float(it[2]) for it in adj["items"]}
+            df["adj_factor"] = df["date"].map(adj_map).fillna(method="ffill").fillna(1.0)
+            if adjust == "qfq":
+                latest_adj = df["adj_factor"].iloc[0]
+                ratio = df["adj_factor"] / latest_adj
+            else:
+                first_adj = df["adj_factor"].iloc[-1]
+                ratio = df["adj_factor"] / first_adj
+            for col in ["open", "close", "high", "low"]:
+                df[col] = (df[col] * ratio).round(3)
+            df = df.drop(columns=["adj_factor"])
+    df = df.iloc[::-1].reset_index(drop=True)
+    return df.tail(limit)
+
+
 # ---------------------------------------------------------------
 # 数据源自适应探测: 检测当前网络哪些源可用, 把可用源排前面
 # 解决"某个源被屏蔽时每只股票都白等超时才回退"导致的扫描慢
@@ -304,6 +411,11 @@ def _quick_check_source(src):
             return df is not None and not df.empty
         elif src == "sina":
             df = _kline_from_sina("sh600519", "daily", 3)
+            return df is not None and not df.empty
+        elif src == "tushare":
+            if not _get_tushare_token():
+                return False
+            df = _kline_from_tushare("600519", "daily", 3, "qfq")
             return df is not None and not df.empty
     except Exception:
         pass
@@ -340,6 +452,14 @@ def _probe_sources():
     except Exception:
         pass
     order = []
+    # Tushare 最优先(复权+稳定, 需token)
+    if _get_tushare_token():
+        try:
+            df = _kline_from_tushare("600519", "daily", 5, "qfq")
+            if df is not None and not df.empty:
+                order.append("tushare")
+        except Exception:
+            pass
     params_base = {
         "fields1": "f1,f2,f3,f4,f5,f6",
         "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
@@ -404,7 +524,9 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
     # 按探测到的可用源顺序尝试(避免被屏蔽的源白等超时)
     df = pd.DataFrame()
     for src in _probe_sources():
-        if src == "eastmoney":
+        if src == "tushare":
+            df = _kline_from_tushare(code, period, limit, adjust)
+        elif src == "eastmoney":
             df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
         elif src == "sina":
             df = _kline_from_sina(code, period, limit)
