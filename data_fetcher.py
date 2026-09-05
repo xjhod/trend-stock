@@ -221,7 +221,7 @@ def _kline_from_sina(code, period="daily", limit=300):
     return pd.DataFrame()
 
 
-def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
+def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq", retry=4, timeout=5):
     """腾讯 K 线（前复权/后复权/不复权）。作为最后兜底源（东财/新浪都不通时）。
     返回 DataFrame（列同其他源）；失败返回空。
     腾讯接口偶发 501 限流，用独立浏览器 UA + 腾讯 Referer + 重试3次。"""
@@ -240,9 +240,9 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq"):
             url = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
             params = {"param": f"{sym},{klt},,{limit}"}
         lines = []
-        for i in range(4):
+        for i in range(retry):
             try:
-                r = requests.get(url, params=params, headers=_hdr, timeout=5)
+                r = requests.get(url, params=params, headers=_hdr, timeout=timeout)
                 if r.status_code != 200:
                     time.sleep(1.0 + i)
                     continue
@@ -288,6 +288,28 @@ _SOURCE_ORDER = None
 _PROBE_VERSION = "2"   # 探测逻辑版本, 变了就强制重新探测(避免旧缓存)
 _SOURCE_ORDER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bt_data", "source_order.json")
 
+def _quick_check_source(src):
+    """快速健康检查: 发1次短请求(timeout=3), 通返回True, 不通False.
+    用于读缓存时验证缓存里的源是否还通(腾讯等不稳定源关键)."""
+    try:
+        if src == "eastmoney":
+            df = _kline_from_eastmoney("sh600519", 101, 1, {
+                "fields1":"f1,f2,f3,f4,f5,f6",
+                "fields2":"f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+                "ut":"7eea3edcaed734bea9cbfc24409ed989",
+                "beg":"20220101","end":"20500101"}, 3)
+            return df is not None and not df.empty
+        elif src == "tencent":
+            df = _kline_from_tencent("sh600519", "daily", 3, "qfq", retry=1, timeout=3)
+            return df is not None and not df.empty
+        elif src == "sina":
+            df = _kline_from_sina("sh600519", "daily", 3)
+            return df is not None and not df.empty
+    except Exception:
+        pass
+    return False
+
+
 def _probe_sources():
     """探测东财/新浪/腾讯连通性, 返回可用源顺序(可用在前). 当天缓存到文件, 进程内只探测一次."""
     global _SOURCE_ORDER
@@ -299,8 +321,22 @@ def _probe_sources():
             d = json.load(f)
         if (d.get("date") == time.strftime("%Y-%m-%d")
                 and d.get("pv") == _PROBE_VERSION and d.get("order")):
-            _SOURCE_ORDER = d["order"]
-            return _SOURCE_ORDER
+            cached = d["order"]
+            # 健康检查: 快速验证缓存里的源是否还通(腾讯不稳定时关键)
+            healthy = [src for src in cached if _quick_check_source(src)]
+            if healthy:
+                _SOURCE_ORDER = healthy
+                if healthy != cached:
+                    # 健康检查后源变少, 更新缓存
+                    try:
+                        with open(_SOURCE_ORDER_FILE, "w", encoding="utf-8") as f:
+                            json.dump({"date": time.strftime("%Y-%m-%d"),
+                                       "order": healthy, "pv": _PROBE_VERSION},
+                                      f, ensure_ascii=False)
+                    except Exception:
+                        pass
+                return _SOURCE_ORDER
+            # 缓存里的源全不通, 重新探测
     except Exception:
         pass
     order = []
@@ -373,7 +409,7 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
         elif src == "sina":
             df = _kline_from_sina(code, period, limit)
         elif src == "tencent":
-            df = _kline_from_tencent(code, period, limit, adjust)
+            df = _kline_from_tencent(code, period, limit, adjust, retry=1, timeout=3)
         if df is not None and not df.empty:
             break
     if df is None:
