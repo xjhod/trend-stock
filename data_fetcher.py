@@ -338,38 +338,46 @@ def _tushare_request(api_name, params, fields="", timeout=10):
         pass
     return None
 
+_TUSHARE_DAILY_CACHE = {}  # 内部缓存: ts_code -> daily原始DataFrame(避免周线月线重复请求)
+
 def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
     ts_code = _tushare_code(code)
-    # Tushare只有daily接口可用(120积分), 周线/月线从daily聚合
     end = time.strftime("%Y%m%d")
     start = "20240101"
-    data = _tushare_request("daily", {"ts_code": ts_code, "start_date": start, "end_date": end},
-                             "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount")
-    if not data or not data.get("items"):
-        return pd.DataFrame()
-    fields = data["fields"]
-    items = data["items"]
-    rows = []
-    for it in items:
-        rec = dict(zip(fields, it))
-        try:
-            td = rec["trade_date"]
-            # Tushare日期格式YYYYMMDD -> 统一YYYY-MM-DD
-            date_fmt = td[:4] + "-" + td[4:6] + "-" + td[6:] if len(td) == 8 else td
-            rows.append({
-                "date": date_fmt, "open": float(rec["open"]),
-                "close": float(rec["close"]), "high": float(rec["high"]),
-                "low": float(rec["low"]), "volume": float(rec.get("vol", 0)),
-                "amount": float(rec.get("amount", 0)),
-                "pct_chg": float(rec.get("pct_chg", 0)),
-                "change": float(rec.get("change", 0)),
-                "amplitude": 0.0, "turnover": 0.0,
-            })
-        except Exception:
-            continue
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
+    # Tushare只有daily接口可用(120积分), 周线/月线从daily聚合
+    # 内部缓存: daily原始数据只调一次, 周线/月线从缓存聚合(速度提升3倍)
+    cache_key = f"{ts_code}:{adjust}"
+    if cache_key in _TUSHARE_DAILY_CACHE:
+        df = _TUSHARE_DAILY_CACHE[cache_key].copy()
+    else:
+        data = _tushare_request("daily", {"ts_code": ts_code, "start_date": start, "end_date": end},
+                                 "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount")
+        if not data or not data.get("items"):
+            return pd.DataFrame()
+        fields = data["fields"]
+        items = data["items"]
+        rows = []
+        for it in items:
+            rec = dict(zip(fields, it))
+            try:
+                td = rec["trade_date"]
+                date_fmt = td[:4] + "-" + td[4:6] + "-" + td[6:] if len(td) == 8 else td
+                rows.append({
+                    "date": date_fmt, "open": float(rec["open"]),
+                    "close": float(rec["close"]), "high": float(rec["high"]),
+                    "low": float(rec["low"]), "volume": float(rec.get("vol", 0)),
+                    "amount": float(rec.get("amount", 0)),
+                    "pct_chg": float(rec.get("pct_chg", 0)),
+                    "change": float(rec.get("change", 0)),
+                    "amplitude": 0.0, "turnover": 0.0,
+                })
+            except Exception:
+                continue
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+        # 存入内部缓存(供周线/月线聚合复用, 避免重复请求)
+        _TUSHARE_DAILY_CACHE[cache_key] = df.copy()
     # Tushare只有daily接口可用(120积分), weekly/monthly从daily聚合
     if period in ("weekly", "monthly"):
         df["date"] = pd.to_datetime(df["date"])
