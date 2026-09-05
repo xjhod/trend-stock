@@ -353,8 +353,11 @@ def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
     for it in items:
         rec = dict(zip(fields, it))
         try:
+            td = rec["trade_date"]
+            # Tushare日期格式YYYYMMDD -> 统一YYYY-MM-DD
+            date_fmt = td[:4] + "-" + td[4:6] + "-" + td[6:] if len(td) == 8 else td
             rows.append({
-                "date": rec["trade_date"], "open": float(rec["open"]),
+                "date": date_fmt, "open": float(rec["open"]),
                 "close": float(rec["close"]), "high": float(rec["high"]),
                 "low": float(rec["low"]), "volume": float(rec.get("vol", 0)),
                 "amount": float(rec.get("amount", 0)),

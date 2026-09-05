@@ -1,0 +1,11 @@
+# Tushare Token 配置文件
+# 使用方法:
+# 1. 复制本文件, 重命名为 tushare_token.txt
+# 2. 把下面的 xxxxx 替换成你的 Tushare token (从 tushare.pro 个人中心获取)
+# 3. 保存后重启程序, 自动启用 Tushare 复权数据
+# 4. 删除 tushare_token.txt 则降级回腾讯/新浪数据源
+#
+# 120积分可用: daily(K线)/adj_factor(复权因子)/stock_basic(股票列表)/daily_basic(PE/PB)
+# 资金流需更高积分, 程序自动用新浪兜底
+
+xxxxx你的token粘贴到这里xxxxx

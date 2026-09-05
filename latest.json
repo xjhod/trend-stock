@@ -1,5 +1,5 @@
 {
-  "version": "1.9.11",
-  "note": "集成Tushare数据源(120积分可用): K线使用daily+复权因子计算前复权, 数据质量和稳定性优于腾讯/新浪。探测顺序: Tushare→东财→腾讯→新浪。资金流继续用新浪(Tushare需更高积分)。配置: 在程序目录创建tushare_token.txt, 粘贴你的Tushare token保存即可自动启用。删除该文件则降级回腾讯/新浪。",
+  "version": "1.9.12",
+  "note": "修复Tushare K线日期格式bug: Tushare返回YYYYMMDD格式(如20260904), 前端期望YYYY-MM-DD, 导致K线图显示'暂无数据'。修复后日期格式统一, K线图正常渲染。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
