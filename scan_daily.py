@@ -704,8 +704,6 @@ def _scan_one(it):
                 score += 1  # 三层共振
             if gain60 > 60:
                 score -= 1  # 已涨太多降权
-            if mkt_high_weak:
-                score -= 1
             channel = "周线趋势"
             tags = ["周线趋势"]
             if pats:
@@ -723,7 +721,10 @@ def _scan_one(it):
         # [实证: 2/15前20漏掉6-8只都是dd60在0~-5%的强势中段股(德业/开山/电光/博众等),
         #  日线up+有形态+站上MA20, 但5个通道都要求回撤>=5%被全拒]
         # 仅行业动量前30%放行(行业弱时追高创新高股风险大)
-        if channel is None and ind_mom_ok:
+        # 中段通道行业门槛: 放宽到前60%(仅本通道, 其余通道仍用前30%加分)
+        ind_mid_ok = (ind_rank is not None and ind_rank <= 0.60
+                      and ind_mom is not None and ind_mom > 0)
+        if channel is None and ind_mid_ok:
             if -0.05 <= dd60 and above_ma20 and (direction == "up" or short_up):
                 if pats or vol_hit:
                     hot = (gain60 > 80) or (dist_hi < 1 and gain60 > 40)
@@ -758,6 +759,9 @@ def _scan_one(it):
             if score < 2:
                 return None
         else:
+            # 差异化门槛: 超跌类通道(1-4)需score>=3(强确认), 趋势类通道(5/6)保持>=2
+            if channel in ("超跌反弹", "超跌放量", "底部连阳", "浅超跌启动") and score < 3:
+                return None
             if score < 2:
                 return None
         level = min(3, int(round(score)))
