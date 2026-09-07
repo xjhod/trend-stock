@@ -254,6 +254,73 @@
     renderKline();
     renderFundChart(d);
     renderFundamentalChart(d);
+    renderDiagnose(d);
+  }
+
+  // 个股诊断报告：环境/风险/信号/纪律（实证支撑，独立请求）
+  function renderDiagnose(d) {
+    const wrap = document.getElementById("diag-wrap");
+    const el = document.getElementById("diag-content");
+    if (!wrap || !el) return;
+    const code = d.code;
+    fetch("/api/diagnose/" + code)
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) { wrap.style.display = "none"; return; }
+        wrap.style.display = "";
+        const mk = res.market || {}, ind = res.industry || {}, f = res.feature || {};
+        const envG = res.env ? res.env.grade : "caution";
+        const envNote = res.env ? res.env.note : "";
+        const envMap = {
+          operable: { t: "环境可操作", c: "#1a7f37", bg: "#e6f4ea" },
+          caution: { t: "环境谨慎", c: "#b45309", bg: "#fef3c7" },
+          avoid: { t: "环境回避", c: "#c62828", bg: "#fdecea" }
+        };
+        const e = envMap[envG] || envMap.caution;
+        const mkState = mk.state || "unknown";
+        const mkCls = mkState === "强势" ? "up" : (mkState === "深度弱市" || mkState === "弱势" ? "down" : "flat");
+        const indCls = ind.direction === "up" ? "up" : (ind.direction === "down" ? "down" : "flat");
+        const stkCls = f.above_ma20 ? "up" : "down";
+        const sigHtml = res.signal ? (
+          '<div class="diag-block">' +
+            '<div class="diag-block-title">当前信号参考</div>' +
+            '<div class="diag-sig"><span class="diag-sig-tag">' + res.signal.key + '</span>' +
+            '<span>历史20日修复均值 <b>+' + res.signal.mean20 + '%</b>（单信号统计）</span></div>' +
+            '<div class="diag-note">' + res.signal.note + '</div>' +
+          '</div>'
+        ) : (
+          '<div class="diag-block"><div class="diag-block-title">当前信号参考</div>' +
+          '<div class="diag-note">当前未触发超跌/趋势类信号，形态见K线图标注。</div></div>'
+        );
+        const disc = res.discipline || {};
+        el.innerHTML =
+          '<div class="diag-env" style="background:' + e.bg + ';border-left:4px solid ' + e.c + '">' +
+            '<span class="diag-env-tag" style="color:' + e.c + '">' + e.t + '</span>' +
+            '<span class="diag-env-note">' + envNote + '</span>' +
+          '</div>' +
+          '<div class="diag-grid">' +
+            '<div class="diag-cell"><div class="k">大盘</div><div class="v ' + mkCls + '">' + mkState + '</div>' +
+              '<div class="s">20日动量 ' + (mk.mom20 == null ? "--" : mk.mom20 + "%") + ' · 距高 ' + (mk.dd60 == null ? "--" : mk.dd60 + "%") + '</div></div>' +
+            '<div class="diag-cell"><div class="k">行业 ' + (ind.name || "") + '</div><div class="v ' + indCls + '">' + ind.state + '</div>' +
+              '<div class="s">20日动量 ' + (ind.mom20 == null ? "--" : ind.mom20 + "%") + '</div></div>' +
+            '<div class="diag-cell"><div class="k">个股</div><div class="v ' + stkCls + '">' + (f.above_ma20 ? "站上MA20" : "跌破MA20") + '</div>' +
+              '<div class="s">60日回撤 ' + f.dd60 + '% · 20日动量 ' + f.mom20 + '%</div></div>' +
+            '<div class="diag-cell"><div class="k">波动率</div><div class="v flat">' + f.vol20 + '%</div>' +
+              '<div class="s">RSI6 ' + f.rsi6 + ' · 连跌 ' + f.streak + '天</div></div>' +
+          '</div>' +
+          sigHtml +
+          '<div class="diag-block">' +
+            '<div class="diag-block-title">操作纪律建议（实证：止损是唯一稳定正贡献）</div>' +
+            '<div class="diag-disc">' +
+              '<span class="disc-item">仓位 <b>' + (disc.position || "--") + '</b></span>' +
+              '<span class="disc-item">止损 <b>-' + (disc.stop_loss || "--") + '%</b>' +
+              (disc.sl_price ? '（<b class="down">' + disc.sl_price + '</b>）' : '') + '</span>' +
+              '<span class="disc-item">止盈参考 <b>+' + (disc.take_profit || "--") + '%</b>' +
+              (disc.tp_price ? '（<b class="up">' + disc.tp_price + '</b>）' : '') + '</span>' +
+            '</div>' +
+          '</div>';
+      })
+      .catch(function () { wrap.style.display = "none"; });
   }
 
   function renderQuoteBar(d) {

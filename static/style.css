@@ -576,3 +576,23 @@ body.lowkey #empty-state { color:#69707a; font-size:13px; }
   border-radius:5px; cursor:pointer; font-size:12px; padding:3px 8px;
 }
 .ind-back:hover { color:var(--accent); border-color:var(--accent); }
+
+/* ---------- 个股诊断报告 ---------- */
+.diag-wrap { margin-top:14px; }
+.diag-env { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:6px; margin-bottom:10px; }
+.diag-env-tag { font-size:14px; font-weight:700; white-space:nowrap; }
+.diag-env-note { font-size:12px; color:var(--text); line-height:1.5; }
+.diag-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px; }
+.diag-cell { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:8px 10px; }
+.diag-cell .k { font-size:11px; color:var(--text-dim); margin-bottom:4px; }
+.diag-cell .v { font-size:14px; font-weight:700; }
+.diag-cell .v.up { color:var(--up); } .diag-cell .v.down { color:var(--down); }
+.diag-cell .s { font-size:11px; color:var(--text-dim); margin-top:4px; }
+.diag-block { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:10px 14px; margin-bottom:10px; }
+.diag-block-title { font-size:12px; font-weight:600; color:var(--text-dim); margin-bottom:6px; }
+.diag-sig { font-size:13px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.diag-sig-tag { font-size:12px; font-weight:700; color:#fff; background:var(--accent); padding:2px 8px; border-radius:4px; }
+.diag-note { font-size:12px; color:var(--text-dim); line-height:1.6; margin-top:6px; }
+.diag-disc { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; }
+.disc-item b { color:var(--accent); }
+.disc-item b.up { color:var(--up); } .disc-item b.down { color:var(--down); }

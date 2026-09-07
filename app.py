@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.17"
+_BACKEND_VERSION = "1.9.18"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -685,6 +685,182 @@ def api_version():
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
+
+
+# ---------------------------------------------------------------
+# 个股诊断报告（选中个股后，程序给的实证帮助）
+# ---------------------------------------------------------------
+# 大样本历史统计（61.7万样本逐日回测, 2025-01~2026-08, 次日开盘买入口径）
+SIG_HIST = {
+    "超跌加速": {"mean20": 3.1, "note": "60日回撤>25% + 高波动 + 当日跌≥2% + 连跌≥2天 + RSI6<15。单信号20日修复统计均值+3.1%（止盈10%/止损5%口径）。但弱市/强市差异极大，信号扎堆期组合实盘曾亏损——仅供研究参考，非买入建议。"},
+    "深度超跌": {"mean20": 2.9, "note": "60日回撤>25% + 波动>3% + 市值<100亿 + 跌破MA20。20日修复统计均值约+2.9%。弱市胜率明显下降（历史弱市止损率约80%）。"},
+    "超跌反弹": {"mean20": 1.9, "note": "超跌企稳反弹（RSI<30、跌破MA20）。弱市反弹持续性差，需结合大盘环境。"},
+    "趋势中段": {"mean20": 2.2, "note": "接近新高 + 上升趋势 + 行业动量。统计上略优于随机，但2025样本外5时点未稳定跑赢大盘，仅作观察。"},
+}
+ENV_NOTE = {
+    "operable": "大盘/行业/个股三层环境配合，历史上此类环境下顺势股表现较好。",
+    "caution": "大盘偏弱或个股走弱，历史实证弱市买入胜率明显下降，建议低仓位或等待。",
+    "avoid": "大盘深度弱市或个股处于下跌趋势，历史实证超跌股反弹胜率仅约20%（止损率80%），建议回避或仅观察。",
+}
+
+
+def _diag_market():
+    """大盘环境: 20日动量 + 距60日高 + 方向 → 状态分级"""
+    rows = _safe_call(layers.get_market_kline, [])
+    closes = [r["close"] for r in rows]
+    if len(closes) < 65:
+        return {"state": "unknown", "grade": 2, "mom20": None, "dd60": None, "direction": "unknown", "concl": "数据不足"}
+    c = closes[-1]
+    mom20 = c / closes[-21] - 1
+    hi60 = max(closes[-60:])
+    dd60 = c / hi60 - 1
+    direction = layers._direction(closes)
+    if mom20 < -0.08 or (dd60 < -0.10 and mom20 < -0.03):
+        state, grade = "深度弱市", 0
+    elif mom20 < -0.03 or (dd60 < -0.05 and mom20 < 0):
+        state, grade = "弱势", 1
+    elif mom20 < 0:
+        state, grade = "中性偏弱", 2
+    elif mom20 < 0.03:
+        state, grade = "中性偏强", 3
+    else:
+        state, grade = "强势", 4
+    concl = "大盘深度弱市，历史实证此时超跌股反弹胜率低，控制仓位" if grade <= 1 else (
+        "大盘中性/偏强，环境尚可" if grade >= 3 else "大盘偏弱，谨慎对待")
+    return {"state": state, "grade": grade, "mom20": round(mom20 * 100, 1), "dd60": round(dd60 * 100, 1),
+            "direction": direction, "concl": concl}
+
+
+def _diag_industry(ind_name):
+    """行业环境: 20日动量 + 方向"""
+    rows = layers._load_ind_cache().get(ind_name, [])
+    closes = [r["close"] for r in rows]
+    if len(closes) < 25:
+        return {"name": ind_name or "未知", "state": "unknown", "mom20": None, "direction": "unknown"}
+    c = closes[-1]
+    mom20 = c / closes[-21] - 1
+    direction = layers._direction(closes)
+    state = "向上" if direction == "up" else ("向下" if direction == "down" else "横盘")
+    return {"name": ind_name or "未知", "state": state, "mom20": round(mom20 * 100, 1), "direction": direction}
+
+
+def _diag_features(code, dk):
+    """个股风险画像特征"""
+    closes = dk["close"].tolist()
+    highs = dk["high"].tolist()
+    if len(closes) < 65:
+        return None
+    c = closes[-1]
+    rets = [(closes[i] / closes[i - 1] - 1) for i in range(-20, 0)]
+    vol20 = (sum(x * x for x in rets) / len(rets)) ** 0.5
+    dd60 = c / max(highs[-60:]) - 1
+    mom20 = c / closes[-21] - 1
+    ma20 = sum(closes[-20:]) / 20
+    diff = [closes[i] - closes[i - 1] for i in range(-6, 0)]
+    gain = sum(max(x, 0) for x in diff) / 6
+    loss = sum(max(-x, 0) for x in diff) / 6
+    rsi6 = 100 - 100 / (1 + gain / loss) if loss > 0 else 100
+    streak = 0
+    for i in range(-1, -len(closes), -1):
+        if closes[i] < closes[i - 1]:
+            streak += 1
+        else:
+            break
+    day_chg = c / closes[-2] - 1
+    mv = None
+    try:
+        with open(HIGHFIT_FILE, encoding="utf-8") as f:
+            pool = json.load(f)
+        for s in pool:
+            if s.get("code") == code:
+                mv = s.get("mv")
+                break
+    except Exception:
+        pass
+    return {"price": c, "vol20": round(vol20 * 100, 1), "dd60": round(dd60 * 100, 1),
+            "mom20": round(mom20 * 100, 1), "ma20": ma20, "above_ma20": c > ma20,
+            "rsi6": round(rsi6, 1), "streak": streak, "day_chg": round(day_chg * 100, 2), "mv": mv}
+
+
+def _diag_env(mkt, ind, feat):
+    """环境评级: operable/caution/avoid"""
+    g = mkt.get("grade", 2)
+    if g <= 1 or (mkt.get("dd60") or 0) < -10:
+        grade = "avoid" if g == 0 else "caution"
+    elif g == 2:
+        grade = "caution" if ind.get("direction") == "down" or not feat["above_ma20"] else "operable"
+    else:
+        grade = "operable"
+        if ind.get("direction") == "down":
+            grade = "caution"
+        if not feat["above_ma20"] and feat["mom20"] < 0:
+            grade = "caution"
+    if g <= 1 and feat["day_chg"] < -2:
+        grade = "avoid"
+    return {"grade": grade, "note": ENV_NOTE[grade]}
+
+
+def _diag_signal(feat):
+    """当前信号类型（参考）"""
+    if feat["dd60"] < -25 and feat["vol20"] > 3 and (feat["mv"] and feat["mv"] < 1e10) \
+            and not feat["above_ma20"] and feat["day_chg"] < -2 and feat["streak"] >= 2 and feat["rsi6"] < 15:
+        return "超跌加速"
+    if feat["dd60"] < -25 and feat["vol20"] > 3 and (feat["mv"] and feat["mv"] < 1e10) and not feat["above_ma20"]:
+        return "深度超跌"
+    if feat["dd60"] < -10 and not feat["above_ma20"] and feat["rsi6"] < 30:
+        return "超跌反弹"
+    if feat["mom20"] > 3 and feat["above_ma20"]:
+        return "趋势中段"
+    return None
+
+
+def _diag_discipline(grade, feat):
+    """操作纪律: 止损/止盈/仓位"""
+    sl = min(max(5, feat["vol20"] * 1.5), 10)
+    tp = 10 if feat["vol20"] < 3 else 15
+    pos_map = {"operable": "50%~100%（正常仓位）", "caution": "≤40%（谨慎轻仓）", "avoid": "≤20% 或空仓（回避）"}
+    return {"stop_loss": round(sl, 1), "take_profit": tp, "position": pos_map[grade],
+            "sl_price": round(feat["price"] * (1 - sl / 100), 2),
+            "tp_price": round(feat["price"] * (1 + tp / 100), 2)}
+
+
+@app.route("/api/diagnose/<code>")
+def api_diagnose(code):
+    """个股诊断报告: 环境/风险/信号/纪律（实证支撑）"""
+    code = str(code).strip()
+    dk = _safe_call(lambda: _robust_kline(code, "daily", 300), pd.DataFrame())
+    if dk.empty or len(dk) < 65:
+        return jsonify({"ok": False, "error": "K线数据不足"})
+    feat = _diag_features(code, dk)
+    if feat is None:
+        return jsonify({"ok": False, "error": "K线数据不足"})
+    mkt = _diag_market()
+    ind_name = ""
+    try:
+        with open(HIGHFIT_FILE, encoding="utf-8") as f:
+            pool = json.load(f)
+        for s in pool:
+            if s.get("code") == code:
+                ind_name = s.get("ind", "")
+                break
+    except Exception:
+        pass
+    ind = _diag_industry(ind_name)
+    env = _diag_env(mkt, ind, feat)
+    sig_key = _diag_signal(feat)
+    sig_info = None
+    if sig_key:
+        h = SIG_HIST[sig_key]
+        sig_info = {"key": sig_key, "mean20": h["mean20"], "note": h["note"]}
+    disc = _diag_discipline(env["grade"], feat)
+    return jsonify({
+        "ok": True, "code": code, "name": _lookup_name(code),
+        "env": {"grade": env["grade"], "note": env["note"]},
+        "market": mkt, "industry": ind,
+        "feature": feat,
+        "signal": sig_info,
+        "discipline": disc,
+    })
 
 
 # ---------------- 行业轮动（行业趋势看板） ----------------
