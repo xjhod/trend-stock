@@ -596,3 +596,13 @@ body.lowkey #empty-state { color:#69707a; font-size:13px; }
 .diag-disc { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; }
 .disc-item b { color:var(--accent); }
 .disc-item b.up { color:var(--up); } .disc-item b.down { color:var(--down); }
+
+/* ---------- 诊断报告 v2：三维结论 ---------- */
+.diag-verdict { display:flex; flex-direction:column; gap:8px; padding:12px 14px; border-radius:6px; margin-bottom:10px; }
+.diag-vd-tag { font-size:15px; font-weight:700; margin-right:10px; white-space:nowrap; }
+.diag-vd-summary { font-size:13px; color:var(--text); line-height:1.5; }
+.diag-vd-conds { display:flex; flex-wrap:wrap; gap:6px; }
+.diag-vd-cond { font-size:11px; color:var(--text-dim); background:rgba(255,255,255,.65); border:1px dashed var(--border); padding:2px 8px; border-radius:4px; }
+.diag-fsig-tag { font-size:12px; font-weight:700; color:#fff; background:#57606a; padding:2px 8px; border-radius:4px; }
+.diag-fsig-tag.up { background:var(--accent); }
+.diag-sig .fundBadge b.up { color:var(--up); } .diag-sig .fundBadge b.down { color:var(--down); }

@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.18"
+_BACKEND_VERSION = "1.9.19"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -777,9 +777,139 @@ def _diag_features(code, dk):
                 break
     except Exception:
         pass
+    # 位置技术: 250日回撤/分位 + 均线排列
+    hi250 = max(highs[-250:]) if len(highs) >= 100 else max(highs)
+    lo250 = min(closes[-250:]) if len(closes) >= 100 else min(closes)
+    dd250 = c / hi250 - 1
+    pos250 = (c - lo250) / (hi250 - lo250) if hi250 > lo250 else 1.0
+    ma5 = sum(closes[-5:]) / 5
+    ma10 = sum(closes[-10:]) / 10
+    if ma5 > ma10 > ma20:
+        ma_state = "多头排列"
+    elif ma5 < ma10 < ma20:
+        ma_state = "空头排列"
+    else:
+        ma_state = "均线纠缠"
     return {"price": c, "vol20": round(vol20 * 100, 1), "dd60": round(dd60 * 100, 1),
-            "mom20": round(mom20 * 100, 1), "ma20": ma20, "above_ma20": c > ma20,
+            "dd250": round(dd250 * 100, 1), "pos250": round(pos250 * 100, 1),
+            "mom20": round(mom20 * 100, 1), "ma20": ma20, "ma5": ma5, "ma10": ma10,
+            "above_ma20": c > ma20, "ma_state": ma_state,
             "rsi6": round(rsi6, 1), "streak": streak, "day_chg": round(day_chg * 100, 2), "mv": mv}
+
+
+FUND_CACHE = {}
+
+
+def _diag_fundamental(code, mv):
+    """基本面体检: 营收/净利增速趋势 + 状态定性 + 估值估算（缓存1小时）"""
+    now = time.time()
+    cached = FUND_CACHE.get(code)
+    if cached and now - cached[0] < 3600:
+        return cached[1]
+    try:
+        import data_fetcher as _df
+        market = _df.guess_market(code)
+        fin = _df.get_financials(code, market, limit=8)
+    except Exception:
+        fin = pd.DataFrame()
+    if fin is None or fin.empty:
+        res = {"state": "数据不足", "note": "财务数据暂不可用（数据源可能被网络屏蔽）。"}
+        FUND_CACHE[code] = (now, res)
+        return res
+    rows = fin.to_dict("records")
+    latest = rows[0]
+    rev = (latest.get("TOTALOPERATEREVE") or 0) / 1e8
+    profit = (latest.get("PARENTNETPROFIT") or 0) / 1e8
+    rev_yoy = latest.get("TOTALOPERATEREVETZ")
+    profit_yoy = latest.get("PARENTNETPROFITTZ")
+    rev_yoy = round(float(rev_yoy), 1) if rev_yoy is not None else None
+    profit_yoy = round(float(profit_yoy), 1) if profit_yoy is not None else None
+    # 历史是否有亏损（近8期）
+    ever_loss = any((r.get("PARENTNETPROFIT") or 0) < 0 for r in rows)
+    margin = (profit / rev * 100) if rev and rev > 0 else None
+    # 状态定性
+    if profit < 0:
+        state = "亏损"
+        note = "最新报告期净利为负，基本面未反转。"
+    elif rev_yoy is not None and rev_yoy < 0:
+        state = "营收下滑"
+        note = "营收同比下滑，增长逻辑受损，需观察。"
+    elif ever_loss:
+        state = "困境反转"
+        note = "历史曾亏损、最新报告期扭亏且双正增长——反转初步确认，但需验证持续性。"
+    elif profit_yoy is not None and profit_yoy > 30 and rev_yoy is not None and rev_yoy > 30:
+        state = "高成长"
+        note = "营收+净利双双高增长（>30%），成长性良好。"
+    else:
+        state = "稳健增长"
+        note = "营收+净利双正增长，基本面稳健。"
+    # 估值估算（半年报×2年化）
+    pe_est = None
+    if mv and profit > 0:
+        annual = profit * 2
+        pe_est = round(mv / (annual * 1e8), 1)
+    res = {"state": state, "rev_yoy": rev_yoy, "profit_yoy": profit_yoy,
+           "rev": round(rev, 2), "profit": round(profit, 2), "margin": round(margin, 1) if margin is not None else None,
+           "pe_est": pe_est, "note": note,
+           "report": str(latest.get("REPORT_DATE"))[:10]}
+    FUND_CACHE[code] = (now, res)
+    return res
+
+
+def _diag_position(feat):
+    """位置与技术定性"""
+    dd = feat["dd250"]
+    if dd is None:
+        return {"state": "数据不足", "note": ""}
+    if dd < -40:
+        state, note = "深度低位", "距250日高点回撤超40%，处于两年最低区。"
+    elif dd < -25:
+        state, note = "低位", "距250日高点回撤25%~40%，位置偏低。"
+    elif dd < -10:
+        state, note = "中位", "距250日高点回撤10%~25%，处于中间位置。"
+    else:
+        state, note = "高位", "距250日高点不足10%，接近历史高位，追高风险大。"
+    if feat["ma_state"] == "空头排列":
+        note += " 均线空头排列，下跌趋势未止。"
+    elif feat["ma_state"] == "多头排列":
+        note += " 均线多头排列，上升趋势中。"
+    return {"state": state, "note": note, "dd250": feat["dd250"], "pos250": feat["pos250"],
+            "ma_state": feat["ma_state"]}
+
+
+def _diag_verdict(fund, pos, env, feat):
+    """综合三维结论: 基本面×位置×环境 → 可操作结论+触发条件"""
+    good_fund = fund["state"] in ("困境反转", "高成长", "稳健增长")
+    low_pos = pos["state"] in ("深度低位", "低位")
+    env_g = env["grade"]
+    score = (1 if good_fund else 0) + (1 if low_pos else 0) + (1 if env_g == "operable" else (0 if env_g == "caution" else -1))
+    if score >= 3:
+        label, color = "可以关注", "green"
+        summary = "好公司 + 低位 + 环境配合：三维条件齐备，可择机小仓位试错。"
+    elif score == 2:
+        label, color = "值得跟踪·等时机", "orange"
+        summary = ("好公司 + 低位，但环境逆风" if good_fund and low_pos else
+                   "好公司 + 环境配合，但位置偏高" if good_fund and env_g == "operable" else
+                   "低位 + 环境配合，但基本面偏弱")
+    elif score == 1:
+        label, color = "谨慎观察", "amber"
+        summary = "三维中仅一项占优，历史实证此类组合胜率不稳定。"
+    else:
+        label, color = "暂不参与", "red"
+        summary = "基本面未反转 + 环境逆风，历史实证弱市超跌胜率仅约20%。"
+    # 触发条件（按缺口给）
+    conds = []
+    if env_g != "operable":
+        conds.append("等大盘转中性以上（大盘20日动量转正）或行业方向转上")
+    if good_fund and low_pos and feat["ma_state"] == "空头排列":
+        conds.append("等价格站上MA20并回踩不破（企稳确认）")
+    if not good_fund:
+        conds.append("等业绩验证（营收/净利增速转正并持续）")
+    if good_fund and not low_pos:
+        conds.append("等回调到低位（距250日高点回撤>25%）再考虑")
+    if not conds:
+        conds.append("按纪律执行：仓位≤50%，止损-5%~-8%")
+    return {"label": label, "color": color, "summary": summary, "score": score, "conditions": conds[:3]}
 
 
 def _diag_env(mkt, ind, feat):
@@ -847,6 +977,9 @@ def api_diagnose(code):
         pass
     ind = _diag_industry(ind_name)
     env = _diag_env(mkt, ind, feat)
+    fund = _diag_fundamental(code, feat.get("mv"))
+    pos = _diag_position(feat)
+    verdict = _diag_verdict(fund, pos, env, feat)
     sig_key = _diag_signal(feat)
     sig_info = None
     if sig_key:
@@ -855,9 +988,10 @@ def api_diagnose(code):
     disc = _diag_discipline(env["grade"], feat)
     return jsonify({
         "ok": True, "code": code, "name": _lookup_name(code),
+        "verdict": verdict,
         "env": {"grade": env["grade"], "note": env["note"]},
         "market": mkt, "industry": ind,
-        "feature": feat,
+        "feature": feat, "fundamental": fund, "position": pos,
         "signal": sig_info,
         "discipline": disc,
     })

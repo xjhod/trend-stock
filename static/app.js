@@ -293,11 +293,61 @@
           '<div class="diag-note">当前未触发超跌/趋势类信号，形态见K线图标注。</div></div>'
         );
         const disc = res.discipline || {};
-        el.innerHTML =
+        const fund = res.fundamental || {}, pos = res.position || {}, vd = res.verdict || {};
+        const vdMap = {
+          green: { bg: "#e6f4ea", c: "#1a7f37" },
+          orange: { bg: "#fef3c7", c: "#b45309" },
+          amber: { bg: "#fff3e0", c: "#d97706" },
+          red: { bg: "#fdecea", c: "#c62828" }
+        };
+        const vc = vdMap[vd.color] || vdMap.orange;
+        // 基本面块
+        const fundBadgeCls = fund.state === "亏损" || fund.state === "营收下滑" ? "down" :
+          (fund.state === "数据不足" ? "flat" : "up");
+        const fundHtml =
+          '<div class="diag-block">' +
+            '<div class="diag-block-title">① 基本面体检</div>' +
+            '<div class="diag-sig"><span class="diag-fsig-tag">' + (fund.state || "数据不足") + '</span>' +
+            '<span class="fundBadge">营收同比 <b class="' + (fund.rev_yoy == null ? "flat" : (fund.rev_yoy >= 0 ? "up" : "down")) + '">' + (fund.rev_yoy == null ? "--" : fund.rev_yoy + "%") + '</b>' +
+            ' · 净利同比 <b class="' + (fund.profit_yoy == null ? "flat" : (fund.profit_yoy >= 0 ? "up" : "down")) + '">' + (fund.profit_yoy == null ? "--" : fund.profit_yoy + "%") + '</b></span></div>' +
+            '<div class="diag-note">' + (fund.note || "") +
+              (fund.profit != null ? ' 最新净利 ' + fund.profit + '亿 · 净利率 ' + (fund.margin == null ? "--" : fund.margin + "%") : "") +
+              (fund.pe_est ? ' · 动态PE约' + fund.pe_est + '倍（估算）' : '') +
+            '</div>' +
+          '</div>';
+        // 位置技术块
+        const posBadgeCls = pos.state === "深度低位" || pos.state === "低位" ? "up" :
+          (pos.state === "高位" ? "down" : "flat");
+        const posHtml =
+          '<div class="diag-block">' +
+            '<div class="diag-block-title">② 位置与技术</div>' +
+            '<div class="diag-sig"><span class="diag-fsig-tag">' + (pos.state || "--") + '</span>' +
+            '<span>距250日高 <b class="down">' + (pos.dd250 == null ? "--" : pos.dd250 + "%") + '</b>' +
+            ' · 250日分位 <b>' + (pos.pos250 == null ? "--" : pos.pos250 + "%") + '</b>' +
+            ' · ' + (pos.ma_state || "--") + '</span></div>' +
+            '<div class="diag-note">' + (pos.note || "") + '</div>' +
+          '</div>';
+        // 环境块标题升级为③
+        const envHtml =
           '<div class="diag-env" style="background:' + e.bg + ';border-left:4px solid ' + e.c + '">' +
-            '<span class="diag-env-tag" style="color:' + e.c + '">' + e.t + '</span>' +
+            '<span class="diag-env-tag" style="color:' + e.c + '">③ 环境 · ' + e.t + '</span>' +
             '<span class="diag-env-note">' + envNote + '</span>' +
-          '</div>' +
+          '</div>';
+        // 综合结论横幅（置顶）
+        const vdHtml =
+          '<div class="diag-verdict" style="background:' + vc.bg + ';border-left:4px solid ' + vc.c + '">' +
+            '<div><span class="diag-vd-tag" style="color:' + vc.c + '">综合结论 · ' + (vd.label || "--") + '</span>' +
+            '<span class="diag-vd-summary">' + (vd.summary || "") + '</span></div>' +
+            (vd.conditions && vd.conditions.length ?
+              '<div class="diag-vd-conds">触发条件：' + vd.conditions.map(function (x) {
+                return '<span class="diag-vd-cond">' + x + '</span>';
+              }).join("") + '</div>' : '') +
+          '</div>';
+        el.innerHTML =
+          vdHtml +
+          fundHtml +
+          posHtml +
+          envHtml +
           '<div class="diag-grid">' +
             '<div class="diag-cell"><div class="k">大盘</div><div class="v ' + mkCls + '">' + mkState + '</div>' +
               '<div class="s">20日动量 ' + (mk.mom20 == null ? "--" : mk.mom20 + "%") + ' · 距高 ' + (mk.dd60 == null ? "--" : mk.dd60 + "%") + '</div></div>' +
