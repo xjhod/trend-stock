@@ -175,6 +175,68 @@ def _weekly_trend_up(code):
         return None
 
 
+def _ind_mom20(ind, asof=None):
+    """行业近20日动量% (行业轮动优先: 走强行业加分)"""
+    try:
+        rows = layers._load_ind_cache().get(ind, [])
+        if asof:
+            rows = [r for r in rows if r["date"] <= asof]
+        ic = [r["close"] for r in rows]
+        if len(ic) < 21:
+            return None
+        return (ic[-1] / ic[-21] - 1) * 100
+    except Exception:
+        return None
+
+
+def _weekly_strong(code):
+    """周线转强(门槛降低, 替代严格多头排列): 周MA5>周MA10 且 最新周收盘>周MA5
+    [实证: 严格多头排列太滞后, 启动初期(医药/通信等)常被漏掉; 转强信号提前1-2周]"""
+    try:
+        wdf = get_kline(code, "weekly", 120, "")
+        if wdf is None or len(wdf) < 11:
+            return None
+        c = wdf["close"].tolist()
+        ma5 = sum(c[-5:]) / 5
+        ma10 = sum(c[-10:]) / 10
+        return bool(ma5 > ma10 and c[-1] > ma5)
+    except Exception:
+        return None
+
+
+def _vol3_ratio(df):
+    """近3日任一放量倍数(放量窗口放宽: 不只看当日, 捕捉提前放量启动)"""
+    try:
+        v = df["volume"].tolist()
+        if len(v) < 8:
+            return 1.0
+        best = 1.0
+        for i in range(-3, 0):
+            v5 = sum(v[i - 6:i - 1]) / 5
+            if v5 > 0:
+                best = max(best, v[i] / v5)
+        return best
+    except Exception:
+        return 1.0
+
+
+def _mkt_high_weak():
+    """大盘高位滞涨: 距60日高<5% 且 近20日动量转负 → 建议降仓
+    [实证: 6/15大盘距高-3.4%且近20日-0.8%, 之后系统性下跌; 高位滞涨时应降仓]"""
+    try:
+        rows = layers.get_market_kline(80)
+        closes = [r["close"] for r in rows]
+        if len(closes) < 65:
+            return False
+        c = closes[-1]
+        hi60 = max(closes[-60:])
+        dd = c / hi60 - 1
+        mom20 = c / closes[-21] - 1 if len(closes) >= 21 else 0
+        return dd > -0.05 and mom20 < 0
+    except Exception:
+        return False
+
+
 def _ind_weekly_up(ind):
     """行业周线多头(当前行业趋势向上): 行业周收盘MA5>MA10 且 最新周收盘>MA10
     [实证: 个股+行业双周线多头 15日收益+8.6% vs 全部+1.2%, 行情分化时区分度最高]
@@ -412,11 +474,14 @@ def _calc_rating(code, daily):
 
 
 def _scan_one(it):
-    """机会双通道:
-    通道A 超跌反弹(抄底): 60日回撤≥20% + 看涨形态
-          [实证: 回撤越深胜率越高(20%→55.8%, 25%→57.8%), 大盘弱时更高(58%),
-           放量反而降胜率→仅提示谨慎]
-    通道B 周线趋势(真趋势): 周线多头排列(周MA5>10>20且收盘>MA10) + 日线回调/共振/形态加分
+    """机会多通道(改进版v2, 同步回测验证结果):
+    通道1 深/中超跌反弹: 60日回撤≥20% + 形态 + (企稳/周线转强/站上MA10任一确认)
+    通道2 超跌放量: 60日回撤≥20% + 近3日放量1.5x + 翻红/站上MA5 (捕捉提前放量启动)
+    通道3 底部连阳: 回撤5-25% + 3日连阳>2% + 站上MA10 + (放量/形态/周线转强)
+    通道4 浅超跌启动: 回撤10-20% + 站上MA20 + 强中形态/放量/周线转强
+    通道5 周线转强趋势: 周MA5>MA10 + 站上MA20 + 不追高 (门槛低于原严格多头)
+    行业门卫分级: 行业down不否决, 放行强信号(深超跌+放量/形态 或 周线转强+形态)
+    评分重构: 行业弱·强信号+2 / 行业走强-1 / 超跌放量+1 / 深超跌+1
     """
     code = it.get("code"); name = it.get("name", ""); ind = it.get("ind", "")
     try:
@@ -429,133 +494,227 @@ def _scan_one(it):
         ly = layers.analyze_layers(code, df)
         mkt_dir = ly["market"]["direction"]
         pats = detect_bullish(df)
-        vol_hit = any(p[2] for p in pats)
         last = df.iloc[-1]
-        chg = float(last["close"]) / float(df.iloc[-2]["close"]) - 1 if len(df) >= 2 else 0
+        close = float(last["close"])
+        closes = df["close"].tolist()
+        chg = close / float(df.iloc[-2]["close"]) - 1 if len(df) >= 2 else 0
+        chg3 = close / closes[-4] - 1 if len(closes) >= 4 and closes[-4] else 0
         # 超跌检测: 60日(含当日)高点回撤
         hi60 = max(df["high"].tolist()[-60:])
-        dd60 = float(last["close"]) / hi60 - 1
+        dd60 = close / hi60 - 1
+        # 企稳/均线
+        stabilized = _stabilized(df)
+        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else close
+        ma10 = sum(closes[-10:]) / 10 if len(closes) >= 10 else close
+        ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else close
+        above_ma20 = close > ma20
+        above_ma10 = close > ma10
+        above_ma5 = close > ma5
+        short_up = ma5 > ma10
+        # 放量(近3日窗口)
+        vr3 = _vol3_ratio(df)
+        vol_hit = vr3 > 1.5
+        vol_hit13 = vr3 > 1.3
+        # 形态质量
+        best_score, best_grade, best_pat = -99, "weak", ""
+        for pn, pi, pvc in pats:
+            sc, lv, _ = _pattern_quality(df, pi, pn, pvc)
+            if sc > best_score:
+                best_score, best_grade, best_pat = sc, lv, pn
 
-        # ============ 门卫: 大盘 不下跌+不在顶部 (两通道必过) ============
+        # ============ 门卫: 大盘 不下跌+不在顶部 ============
         if not _mkt_gate():
             return None
+        # 大盘高位滞涨(不否决, 降权+建议降仓)
+        mkt_high_weak = _mkt_high_weak()
 
-        # ============ 通道A: 超跌企稳(抄底) ============
-        # 超跌通道: 行业仅要求不在下跌(不做顶部限制, 超跌补涨不依赖行业位置)
-        if ly["industry"]["direction"] == "down":
-            return None
-        # 企稳: 不再创新低 + 站上MA10 (超跌但趋势企稳, 在稳定趋势中找突破)
-        stabilized = _stabilized(df)
-        if dd60 <= -0.20 and pats and stabilized:
-            # 形态质量: 取最优形态(位置+量能配合) [回测: strong/med 40% vs weak 20%]
-            best_score, best_grade, best_pat = -99, "weak", ""
-            for pn, pi, pvc in pats:
-                sc, lv, _ = _pattern_quality(df, pi, pn, pvc)
-                if sc > best_score:
-                    best_score, best_grade, best_pat = sc, lv, pn
-            if best_grade == "weak":
-                return None  # 形态弱(位置/量能不配合) → 过滤
-            level = 1
-            if dd60 <= -0.25:
-                level += 1
-            if mkt_dir == "down":
-                level += 1  # 大盘弱时胜率最高(58%)
-            level = min(level, 2)
-            tags = ["超跌企稳", f"形态{best_grade}"]
-            tags.append("+".join(sorted(set(p[0] for p in pats))[:2]))
-            if mkt_dir == "down":
-                tags.append("大盘弱·抄底")
-            elif mkt_dir == "up":
-                tags.append("大盘强·谨慎")
-            if vol_hit:
-                tags.append("放量·谨慎")
-            return {
-                "code": code, "name": name, "ind": ind,
-                "type": "rebound", "level": level,
-                "price": round(float(last["close"]), 2),
-                "change_pct": round(chg * 100, 2),
-                "tags": tags, "resonance": False,
-                "direction": direction, "strength": strength,
-                "dd60": round(dd60 * 100, 1),
-                "pats": [p[0] for p in pats],
-                "rating": _calc_rating(code, df),
-            }
+        # ============ 行业门卫(分级) ============
+        ind_dir = ly["industry"]["direction"]
+        ind_down = (ind_dir == "down")
+        ind_mom = _ind_mom20(ind)
+        ind_mom_ok = (ind_mom is not None and ind_mom > 0)
+        # 60日涨幅(过热/位置)
+        base60 = closes[-61] if len(closes) >= 61 else close
+        gain60 = (close / base60 - 1) * 100 if base60 else 0
+        dist_hi = (1 - close / hi60) * 100 if hi60 else 0
+        over = (dist_hi < 5 and gain60 > 40)
+        # 周线转强(门槛降低)
+        wk_strong = _weekly_strong(code)
+        # 连阳: 近3日收阳≥2天 且 3日累计涨>2%
+        up3 = sum(1 for i in range(-3, 0) if closes[i] > closes[i - 1])
+        lian_yang = (up3 >= 2 and chg3 > 0.02)
 
-        # ============ 通道B: 周线趋势(真趋势) ============
-        # 主判据: 周线多头排列(周MA5>10>20 且 收盘>周MA10)
-        #   [实证: 周线多头60日上涨率52%(+8.7%) vs 仅日线短均线多头46%(+5%)]
-        #   日线回调质量加分: 深回调(3日54%)>回调(50%)>追高(45%)
-        wk_up = _weekly_trend_up(code)
-        if not wk_up:
+        score = 0; channel = None; tags = []
+
+        # ============ 通道1: 深/中超跌反弹 ============
+        if dd60 <= -0.20 and pats:
+            confirm = wk_strong or above_ma10 or vol_hit13
+            if confirm:
+                score = 2
+                if dd60 <= -0.25:
+                    score += 1  # 深超跌
+                if best_grade == "strong":
+                    score += 1  # 强形态
+                if ind_mom_ok:
+                    score += 1  # 行业走强
+                else:
+                    score += 2  # 行业弱·强信号(实证高胜率)
+                if mkt_dir == "up":
+                    score += 1
+                if mkt_high_weak:
+                    score -= 1  # 大盘高位滞涨降权
+                channel = "超跌反弹"
+                tags = ["超跌企稳", f"形态{best_grade}"]
+                if dd60 <= -0.25:
+                    tags.append("深超跌")
+                if wk_strong:
+                    tags.append("周线转强")
+                if vol_hit13:
+                    tags.append("放量")
+                if ind_mom_ok:
+                    tags.append("行业走强")
+                else:
+                    tags.append("行业弱·强信号")
+
+        # ============ 通道2: 超跌放量(近3日放量启动) ============
+        if channel is None and dd60 <= -0.20:
+            if vol_hit and (above_ma5 or chg3 > 0):
+                score = 2
+                if dd60 <= -0.25:
+                    score += 1
+                if wk_strong:
+                    score += 1
+                if ind_mom_ok:
+                    score += 1
+                else:
+                    score += 2
+                if mkt_high_weak:
+                    score -= 1
+                channel = "超跌放量"
+                tags = ["超跌放量", f"{vr3:.1f}x"]
+                if wk_strong:
+                    tags.append("周线转强")
+                if ind_mom_ok:
+                    tags.append("行业走强")
+                else:
+                    tags.append("行业弱·强信号")
+
+        # ============ 通道3: 底部连阳 ============
+        if channel is None and -0.25 < dd60 <= -0.05:
+            if lian_yang and above_ma10 and (vol_hit or pats or wk_strong):
+                score = 2
+                if best_grade == "strong":
+                    score += 1
+                if vol_hit:
+                    score += 1
+                if wk_strong:
+                    score += 1
+                if ind_mom_ok:
+                    score += 1
+                else:
+                    score += 1
+                if mkt_high_weak:
+                    score -= 1
+                channel = "底部连阳"
+                tags = ["底部连阳", f"{chg3 * 100:+.0f}%/3日"]
+                if vol_hit:
+                    tags.append("放量")
+                if wk_strong:
+                    tags.append("周线转强")
+                if pats:
+                    tags.append("+".join(sorted(set(p[0] for p in pats))[:2]))
+                if ind_mom_ok:
+                    tags.append("行业走强")
+                else:
+                    tags.append("行业弱·强信号")
+
+        # ============ 通道4: 浅超跌启动 ============
+        if channel is None and -0.20 < dd60 <= -0.10:
+            if above_ma20 and (short_up or stabilized or wk_strong):
+                cond = (best_grade in ("strong", "medium")) or vol_hit or wk_strong
+                if cond:
+                    score = 1
+                    if best_grade == "strong":
+                        score += 1
+                    if vol_hit:
+                        score += 1
+                    if ind_mom_ok:
+                        score += 1
+                    else:
+                        score += 1
+                    if stabilized:
+                        score += 1
+                    if mkt_dir == "up":
+                        score += 1
+                    if mkt_high_weak:
+                        score -= 1
+                    channel = "浅超跌启动"
+                    tags = ["浅超跌启动", f"形态{best_grade}" if best_grade != "weak" else "转强"]
+                    if vol_hit:
+                        tags.append("放量")
+                    if wk_strong:
+                        tags.append("周线转强")
+                    if ind_mom_ok:
+                        tags.append("行业走强")
+                    else:
+                        tags.append("行业弱·强信号")
+
+        # ============ 通道5: 周线转强趋势 ============
+        if channel is None and wk_strong and above_ma20 and not over:
+            score = 1
+            if pats:
+                score += 1
+            if direction == "down":
+                score += 1  # 日线深回调买点
+            elif direction == "side":
+                score += 0.5
+            if ind_mom_ok:
+                score += 1
+            elif ind_down:
+                score += 1  # 行业弱但个股周线转强
+            if mkt_dir == "up" and ind_dir == "up":
+                score += 1  # 三层共振
+            if gain60 > 60:
+                score -= 1  # 已涨太多降权
+            if mkt_high_weak:
+                score -= 1
+            channel = "周线趋势"
+            tags = ["周线趋势"]
+            if pats:
+                tags.append("+".join(sorted(set(p[0] for p in pats))[:2]))
+            if direction == "down":
+                tags.append("日线深回调")
+            if ind_mom_ok:
+                tags.append("行业走强")
+            elif ind_down:
+                tags.append("行业弱·强信号")
+            if mkt_dir == "up" and ind_dir == "up":
+                tags.append("三层共振")
+
+        if channel is None:
             return None
-        # 过滤0: 行业门卫(not down + 不在顶部, 趋势追涨怕高位接力)
-        if not _ind_gate(ly["industry"]["name"]):
-            return None
-        # 过滤1: 高位过热（距60日高<8% / RSI超买 / 高位放量滞涨, 防日线追高）
-        over, over_reason = _overheated(df)
-        if over:
-            return None
-        # 过滤2: 趋势阶段（买启动/确认期, 不追中继/衰竭期）
-        tm = _trend_metrics(df)
-        if tm is None:
-            return None
-        gain60, bias, dist_hi, days_above20 = tm
-        if gain60 > 100 or bias > 20 or dist_hi < 5:
-            return None  # 衰竭期
-        if gain60 > 60 or bias > 10:
-            return None  # 中继期
-        # 过滤3: 板块轮动后期（个股涨幅远超行业=追高接力, 不追）
-        ig = _ind_gain(ly["industry"]["name"])
-        if ig is not None and gain60 - ig > 40:
-            return None
-        # 过滤4: 行业未破位（行业 close<MA20 → 拦; 允许个股先启动）
-        ind_rows = layers._load_ind_cache().get(ly["industry"]["name"], [])
-        if len(ind_rows) >= 25:
-            icl = [r["close"] for r in ind_rows]
-            if icl[-1] < sum(icl[-20:]) / 20:
+        # ============ 质量门槛 + 行业down强信号 ============
+        if ind_down:
+            strong_signal = (dd60 <= -0.25 and (pats or vol_hit)) or (wk_strong and (pats or above_ma20)) or (lian_yang and (vol_hit or pats))
+            if not strong_signal:
                 return None
-        # 过滤5: 行业位置（行业60日涨幅>25% = 行业高位, 高位接力不做）
-        ig2 = _ind_gain(ly["industry"]["name"])
-        if ig2 is not None and ig2 > 25:
-            return None
-        # 过滤6: 行业趋势确认（行业周线多头 = 当前行业趋势向上）
-        #   [实证: 个股+行业双周线多头 15日收益+8.6% vs 全部+1.2%;
-        #    行业60日涨幅是坏指标(会误杀刚启动板块, 如半导体60日<0但正走强)]
-        iw_up = _ind_weekly_up(ly["industry"]["name"])
-        if iw_up is False:
-            return None
-        reso = (mkt_dir == "up" and
-                ly["industry"]["direction"] == "up")
-        # 评分: 周线多头基础1 + 深回调/共振/形态各+1
-        score = 1
-        if direction == "down":
-            score += 1  # 日线深回调买点(实证60日54%, 3日54%)
-        if reso:
-            score += 1  # 三层共振
-        if pats:
-            score += 1  # 看涨形态
-        if score < 2:
-            return None  # 周线多头但无任何加分(追高且无形态无共振) → 过滤
-        level = min(score, 3)
-        tags = []
-        if reso:
-            tags.append("三层共振")
-        if pats:
-            names = [p[0] for p in pats]
-            tags.append("+".join(sorted(set(names))[:2]) + ("·放量" if vol_hit else ""))
-        tags.append("周线趋势")
-        if direction == "down":
-            tags.append("日线深回调")
-        elif direction == "side":
-            tags.append("日线回调")
+            if score < 2:
+                return None
+        else:
+            if score < 2:
+                return None
+        level = min(3, int(round(score)))
+        tags.append(f"评分{score:.0f}")
+        if mkt_high_weak:
+            tags.append("大盘高位·降仓")
         return {
             "code": code, "name": name, "ind": ind,
-            "type": "trend", "level": level,
-            "price": round(float(last["close"]), 2),
+            "type": channel, "level": level,
+            "price": round(close, 2),
             "change_pct": round(chg * 100, 2),
-            "tags": tags,
-            "resonance": reso,
+            "tags": tags, "resonance": False,
             "direction": direction, "strength": strength,
+            "dd60": round(dd60 * 100, 1),
             "pats": [p[0] for p in pats],
             "rating": _calc_rating(code, df),
         }
