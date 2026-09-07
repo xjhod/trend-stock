@@ -189,6 +189,33 @@ def _ind_mom20(ind, asof=None):
         return None
 
 
+_IND_MOM_RANK = {}  # 行业动量排名缓存 {ind: percentile(0-1)}, None=无数据
+
+
+def _industry_mom_rank(refresh=False):
+    """行业近20日动量排名(百分位): 前30%为强势行业。
+    用于精选分层(A级=行业共振)与中段通道放行。模块级缓存, 一次扫描只算一次。"""
+    global _IND_MOM_RANK
+    if _IND_MOM_RANK and not refresh:
+        return _IND_MOM_RANK
+    mom = {}
+    try:
+        rows_by_ind = layers._load_ind_cache()
+        for ind, rows in rows_by_ind.items():
+            ic = [r["close"] for r in rows]
+            if len(ic) < 21 or ic[-21] <= 0:
+                continue
+            mom[ind] = ic[-1] / ic[-21] - 1
+    except Exception:
+        return {}
+    if not mom:
+        return {}
+    ranked = sorted(mom.items(), key=lambda kv: -kv[1])
+    n = len(ranked)
+    _IND_MOM_RANK = {ind: (i + 1) / n for i, (ind, m) in enumerate(ranked)}
+    return _IND_MOM_RANK
+
+
 def _weekly_strong(code):
     """周线转强(门槛降低, 替代严格多头排列): 周MA5>周MA10 且 最新周收盘>周MA5
     [实证: 严格多头排列太滞后, 启动初期(医药/通信等)常被漏掉; 转强信号提前1-2周]"""
@@ -532,7 +559,8 @@ def _scan_one(it):
         ind_dir = ly["industry"]["direction"]
         ind_down = (ind_dir == "down")
         ind_mom = _ind_mom20(ind)
-        ind_mom_ok = (ind_mom is not None and ind_mom > 0)
+        ind_rank = _industry_mom_rank().get(ind, None)
+        ind_mom_ok = (ind_rank is not None and ind_rank <= 0.30 and ind_mom is not None and ind_mom > 0)
         # 60日涨幅(过热/位置)
         base60 = closes[-61] if len(closes) >= 61 else close
         gain60 = (close / base60 - 1) * 100 if base60 else 0
@@ -691,6 +719,35 @@ def _scan_one(it):
             if mkt_dir == "up" and ind_dir == "up":
                 tags.append("三层共振")
 
+        # ============ 通道6: 中段强势(接近新高的趋势中段股) ============
+        # [实证: 2/15前20漏掉6-8只都是dd60在0~-5%的强势中段股(德业/开山/电光/博众等),
+        #  日线up+有形态+站上MA20, 但5个通道都要求回撤>=5%被全拒]
+        # 仅行业动量前30%放行(行业弱时追高创新高股风险大)
+        if channel is None and ind_mom_ok:
+            if -0.05 <= dd60 and above_ma20 and (direction == "up" or short_up):
+                if pats or vol_hit:
+                    hot = (gain60 > 80) or (dist_hi < 1 and gain60 > 40)
+                    if not hot:
+                        # 中段股特征: 沿均线爬升, 少有强反转形态 → 基础分2(有行业共振+接近新高+日线up三重前提)
+                        score = 2
+                        if best_grade == "strong":
+                            score += 1
+                        if vol_hit:
+                            score += 1
+                        if mkt_dir == "up" and ind_rank is not None and ind_rank <= 0.15:
+                            score += 1  # 大盘+行业双共振
+                        if direction == "up" and best_grade in ("strong", "medium"):
+                            score += 1
+                        channel = "中段强势"
+                        tags = ["中段强势", f"距高{dist_hi:.0f}%"]
+                        if pats:
+                            tags.append("+".join(sorted(set(p[0] for p in pats))[:2]))
+                        if vol_hit:
+                            tags.append("放量")
+                        if best_grade == "strong":
+                            tags.append(f"形态{best_grade}")
+                        tags.append("行业共振")
+
         if channel is None:
             return None
         # ============ 质量门槛 + 行业down强信号 ============
@@ -717,6 +774,7 @@ def _scan_one(it):
             "dd60": round(dd60 * 100, 1),
             "pats": [p[0] for p in pats],
             "rating": _calc_rating(code, df),
+            "tier": "A" if ind_mom_ok else "B",
         }
     except Exception:
         return None
@@ -758,7 +816,16 @@ def run_scan(limit=None, workers=4):
                 r = None  # 单只股票扫描失败不影响整体
             if r:
                 signals.append(r)
+    # 精选分层标签: A级=行业共振(顺势型), B级=行业弱·强信号(反转型)
+    # 实证: 排序偏置会压掉高分股(2/15协鑫+25.8%被压出前5, 收益+1.2%→-2.0%),
+    #       故不做A/B排序偏置, 仅作类型标签供用户区分
+    try:
+        _hwl = _mkt_high_weak()
+    except Exception:
+        _hwl = False
     signals.sort(key=lambda x: (-x["level"], x["change_pct"]))
+    _mode_note = "高位滞涨·注意降仓" if _hwl else "正常环境"
+    a_cnt = sum(1 for sg in signals if sg.get("tier") == "A")
     # 市场环境模式(用户可调): 决定是否过滤/仓位
     try:
         env = env_judge.env_action()
@@ -781,6 +848,8 @@ def run_scan(limit=None, workers=4):
         "elapsed_sec": round(time.time() - t0, 1),
         "signals": signals,
         "env": env,
+        "tier_a": a_cnt,
+        "sort_mode": _mode_note,
     }
     with LOCK:
         json.dump(out, open(SIGNALS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
