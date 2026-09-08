@@ -1,5 +1,5 @@
 {
-  "version": "1.9.22",
-  "note": "修复start.bat/stop.bat在中文Windows下报\"不是内部或外部命令\"：批处理文件改用GBK编码（Windows命令提示符解析bat用GBK，UTF-8中文会乱码拆断命令，导致\"是否结束旧实例\"提示不出现）。现在双击start.bat会正常检测旧进程并询问是否结束。",
+  "version": "1.9.23",
+  "note": "修复在线更新\"3秒后自动重启\"不生效：原实现先启动新进程再杀旧进程，新进程启动时端口仍被旧进程占用，被\"防双实例\"逻辑误杀导致重启失败。现改为独立重启辅助进程(restart_helper.py)：旧服务退出→等待端口释放→自动拉起新实例，重启成功率大幅提升。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }

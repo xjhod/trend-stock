@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.22"
+_BACKEND_VERSION = "1.9.23"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -557,24 +557,24 @@ UPDATE_STATE = {"state": "idle", "msg": "", "progress": 0, "replaced": [], "rest
 
 
 def _auto_restart():
-    """更新完成后自动重启：删除PID锁 -> 拉起新进程 -> 退出旧进程。
-    避免用户每次都要手动关窗口再重新双击启动。"""
+    """更新完成后自动重启：启动独立重启辅助进程 -> 退出旧进程。
+    由 restart_helper.py 等待旧端口释放后再拉起新实例，
+    避免"新进程启动慢 / 端口竞争自杀"导致重启失败。"""
     import subprocess
     import sys
-    _lock = os.path.join(BASE_DIR, ".app.pid")
     try:
-        os.remove(_lock)
+        os.remove(os.path.join(BASE_DIR, ".app.pid"))
     except Exception:
         pass
     try:
+        helper = os.path.join(BASE_DIR, "restart_helper.py")
         if os.name == "nt":
-            # Windows：开新控制台窗口运行（与双击启动体验一致）
-            subprocess.Popen([sys.executable, "app.py"], cwd=BASE_DIR,
+            # Windows：独立辅助进程开新窗口运行，不随本进程退出
+            subprocess.Popen([sys.executable, helper], cwd=BASE_DIR,
                              creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NEW_CONSOLE,
                              close_fds=True)
         else:
-            # 非 Windows（如测试沙箱）：后台分离运行
-            subprocess.Popen([sys.executable, "app.py"], cwd=BASE_DIR,
+            subprocess.Popen([sys.executable, helper], cwd=BASE_DIR,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
     except Exception:
         pass
