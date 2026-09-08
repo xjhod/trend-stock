@@ -28,3 +28,9 @@ bt_data/*
 source_order.json
 full_scan_time.py
 tushare_token.txt
+
+# 研究/回测产物（大文件不入库）
+research/
+*.pkl
+*.csv
+.app.pid

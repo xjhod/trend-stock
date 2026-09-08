@@ -1,46 +1,66 @@
 @echo off
 chcp 65001 >nul
-title Ç÷ÊÆÈ«¾° ¡¤ ¹ÉÆ±·ÖÎö
+title è¶‹åŠ¿å…¨æ™¯ - è‚¡ç¥¨åˆ†æž
 cd /d "%~dp0"
 
 echo ============================================
-echo    Ç÷ÊÆÈ«¾° ¡¤ ¹ÉÆ±·ÖÎö£¨±¾µØ°æ£©
+echo    è¶‹åŠ¿å…¨æ™¯ Â· è‚¡ç¥¨åˆ†æžï¼ˆæœ¬åœ°æœåŠ¡ç‰ˆï¼‰
 echo ============================================
 echo.
 
 if not exist "app.py" (
-    echo [´íÎó] ÕÒ²»µ½ app.py£¬ÇëÏÈÍêÕû½âÑ¹Õû¸öÑ¹Ëõ°üÔÙÔËÐÐ±¾ÎÄ¼þ¡£
-    echo µ±Ç°Ä¿Â¼: %~dp0
+    echo [æç¤º] æ‰¾ä¸åˆ° app.pyï¼Œè¯·ç¡®è®¤å·²å®Œæ•´è§£åŽ‹åŽ‹ç¼©åŒ…å†…æ‰€æœ‰æ–‡ä»¶ã€‚
+    echo å½“å‰ç›®å½•: %~dp0
     pause
     exit /b
 )
 
 where python >nul 2>nul
 if errorlevel 1 (
-    echo [´íÎó] Î´¼ì²âµ½ Python¡£
-    echo ÇëÏÈ°²×° Python 3.10+ ²¢¹´Ñ¡ "Add Python to PATH"£º
-    echo   ÏÂÔØµØÖ·: https://www.python.org/downloads/
-    echo   °²×°Ê±Îñ±Ø¹´Ñ¡ "Add Python to PATH"£¬·ñÔòÎÞ·¨Æô¶¯¡£
+    echo [æç¤º] æœªæ£€æµ‹åˆ° Pythonã€‚
+    echo è¯·å…ˆå®‰è£… Python 3.10+ å¹¶å‹¾é€‰ "Add Python to PATH"ã€‚
+    echo   ä¸‹è½½åœ°å€: https://www.python.org/downloads/
     pause
     exit /b
 )
 
-echo [1/3] ¼ì²éÒÀÀµ...
+rem ---- æ£€æŸ¥ 5000 ç«¯å£æ˜¯å¦è¢«æ—§å®žä¾‹å ç”¨ï¼ˆè¦†ç›–æ›´æ–°åŽæ—§è¿›ç¨‹ä»è·‘æ—§ä»£ç ï¼‰----
+set PORT_BUSY=0
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000" ^| findstr "LISTENING"') do (
+    set PORT_BUSY=1
+)
+if "%PORT_BUSY%"=="1" (
+    echo [æç¤º] æ£€æµ‹åˆ°æ—§çš„æœåŠ¡å®žä¾‹ä»åœ¨è¿è¡Œï¼ˆç«¯å£5000è¢«å ç”¨ï¼‰ã€‚
+    echo   è¦†ç›–æ›´æ–°åŽå¿…é¡»ç»“æŸæ—§è¿›ç¨‹ï¼Œå¦åˆ™æ‰“å¼€çš„è¿˜æ˜¯æ—§ç‰ˆæœ¬ã€‚
+    set /p yn=æ˜¯å¦ç»“æŸæ—§å®žä¾‹å¹¶é‡æ–°å¯åŠ¨? (y/n): 
+    if /i not "%yn%"=="y" (
+        echo å·²å–æ¶ˆã€‚è¯·å…ˆè¿è¡Œ stop.bat å†å¯åŠ¨ã€‚
+        pause
+        exit /b
+    )
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000" ^| findstr "LISTENING"') do (
+        taskkill /f /pid %%a >nul 2>nul
+    )
+    echo æ—§å®žä¾‹å·²ç»“æŸã€‚
+    timeout /t 1 >nul
+)
+
+echo [1/3] æ£€æŸ¥è¿è¡ŒçŽ¯å¢ƒ...
 python -c "import flask, requests, pandas, numpy, waitress" >nul 2>nul
 if errorlevel 1 (
-    echo [2/3] Ê×´ÎÔËÐÐ£¬ÕýÔÚ°²×°ÒÀÀµ£¨Ô¼1-2·ÖÖÓ£¬ÇëÄÍÐÄµÈ´ý£©...
+    echo [2/3] é¦–æ¬¡è¿è¡Œï¼Œæ­£åœ¨å®‰è£…ä¾èµ–ï¼ˆçº¦1-2åˆ†é’Ÿï¼Œè¯·è€å¿ƒç­‰å¾…ï¼‰...
     python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
     if errorlevel 1 (
-        echo [´íÎó] ÒÀÀµ°²×°Ê§°Ü£¬Çë¼ì²éÍøÂçºóÖØÊÔ¡£
+        echo [æç¤º] ä¾èµ–å®‰è£…å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œåŽé‡è¯•ã€‚
         pause
         exit /b
     )
 )
 
-echo [3/3] ÕýÔÚÆô¶¯·þÎñ£¬²¢×Ô¶¯´ò¿ªä¯ÀÀÆ÷...
+echo [3/3] æ­£åœ¨å¯åŠ¨æœåŠ¡ï¼Œå¹¶è‡ªåŠ¨æ‰“å¼€æµè§ˆå™¨...
 echo.
-echo    Èç¹ûä¯ÀÀÆ÷Ã»ÓÐ×Ô¶¯´ò¿ª£¬ÇëÊÖ¶¯·ÃÎÊ:  http://127.0.0.1:5000
-echo    ¹Ø±Õ±¾´°¿Ú = ¹Ø±ÕÈí¼þ
+echo    å¦‚æžœæµè§ˆå™¨æ²¡æœ‰è‡ªåŠ¨æ‰“å¼€ï¼Œè¯·æ‰‹åŠ¨è®¿é—®:  http://127.0.0.1:5000
+echo    å…³é—­æœ¬çª—å£ = å…³é—­è½¯ä»¶
 echo ============================================
 start "" cmd /c "timeout /t 2 >nul & start http://127.0.0.1:5000"
 python app.py

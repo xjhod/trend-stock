@@ -1,23 +1,20 @@
 @echo off
-title Trend Panorama - Stop
+chcp 65001 >nul
+title 趋势全景 - 停止服务
 echo ================================================
-echo   Trend Panorama - Stop all Python processes
+echo   趋势全景 - 停止本地服务（只停本软件）
 echo ================================================
 echo.
-echo   This will kill all python.exe / pythonw.exe
-echo   processes on this PC.
-echo   (Only use if Trend Panorama is the only Python
-echo    program running on this machine.)
-echo.
-set /p yn="Confirm kill all Python processes? (y/n): "
-if /i not "%yn%"=="y" (
-    echo Cancelled.
-    pause
-    exit /b
+set FOUND=0
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000" ^| findstr "LISTENING"') do (
+    taskkill /f /pid %%a >nul 2>nul
+    set FOUND=1
+)
+if "%FOUND%"=="0" (
+    echo 未检测到正在运行的服务（端口5000未被占用）。
+) else (
+    echo 服务已停止。
 )
 echo.
-echo Killing Python processes...
-taskkill /f /im python.exe >nul 2>nul
-taskkill /f /im pythonw.exe >nul 2>nul
-echo Done. Please restart with "start.bat".
+echo 提示: 如浏览器窗口未自动关闭，请手动关闭。
 pause

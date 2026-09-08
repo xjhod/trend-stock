@@ -1,5 +1,5 @@
 {
-  "version": "1.9.20",
-  "note": "修复两大故障：①K线加载失败——根因是Tushare复权计算用了pandas 2.x已移除的fillna写法，导致Tushare数据源永远探测失败；现已修复并成为首选稳定源（复权准确），且数据源请求改为HTTPS优先、HTTP兜底，K线循环加异常保护（任一源故障不再中断）。②自选股添加失败——搜索只依赖东财接口、被网络屏蔽时搜不到；新增腾讯智能搜索兜底（支持代码/名称），东财不通也能添加。",
+  "version": "1.9.21",
+  "note": "解决\"覆盖更新后还是老版本\"：①start.bat 启动前自动检测5000端口旧实例，一键结束并重启（旧进程不结束=永远跑老代码）②stop.bat 改为精准停止本软件（不再杀掉全机Python）③压缩包补上缺失的 latest.json/update_config.json/highfit_pool.json（此前打包规则误伤导致全新安装缺高适配池和更新配置）。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
