@@ -1,5 +1,5 @@
 {
-  "version": "1.9.21",
-  "note": "解决\"覆盖更新后还是老版本\"：①start.bat 启动前自动检测5000端口旧实例，一键结束并重启（旧进程不结束=永远跑老代码）②stop.bat 改为精准停止本软件（不再杀掉全机Python）③压缩包补上缺失的 latest.json/update_config.json/highfit_pool.json（此前打包规则误伤导致全新安装缺高适配池和更新配置）。",
+  "version": "1.9.22",
+  "note": "修复start.bat/stop.bat在中文Windows下报\"不是内部或外部命令\"：批处理文件改用GBK编码（Windows命令提示符解析bat用GBK，UTF-8中文会乱码拆断命令，导致\"是否结束旧实例\"提示不出现）。现在双击start.bat会正常检测旧进程并询问是否结束。",
   "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip"
 }
