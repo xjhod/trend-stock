@@ -327,13 +327,23 @@ def _tushare_request(api_name, params, fields="", timeout=10):
             time.sleep(0.12 - elapsed)
         _TUSHARE_LAST_REQ = time.time()
     try:
-        r = requests.post("http://api.tushare.pro",
-                          json={"api_name": api_name, "token": token,
-                                "params": params, "fields": fields},
-                          timeout=timeout)
-        d = r.json()
-        if d.get("code") == 0 and d.get("data"):
-            return d["data"]
+        # 双协议: 优先 HTTPS(更稳), 失败自动回退 HTTP(部分网络拦截https)
+        last_err = None
+        for proto in ("https", "http"):
+            try:
+                r = requests.post(f"{proto}://api.tushare.pro",
+                                  json={"api_name": api_name, "token": token,
+                                        "params": params, "fields": fields},
+                                  timeout=timeout)
+                d = r.json()
+                if d.get("code") == 0 and d.get("data"):
+                    return d["data"]
+                if d.get("code") != 0 and str(d.get("msg", "")).find("频率") >= 0:
+                    return d  # 限频也原样返回, 便于上层识别
+            except Exception as e:
+                last_err = e
+                continue
+        return None
     except Exception:
         pass
     return None
@@ -398,7 +408,7 @@ def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
                                 "ts_code,trade_date,adj_factor")
         if adj and adj.get("items"):
             adj_map = {it[1]: float(it[2]) for it in adj["items"]}
-            df["adj_factor"] = df["date"].map(adj_map).fillna(method="ffill").fillna(1.0)
+            df["adj_factor"] = df["date"].map(adj_map).ffill().fillna(1.0)
             if adjust == "qfq":
                 latest_adj = df["adj_factor"].iloc[0]
                 ratio = df["adj_factor"] / latest_adj
@@ -549,14 +559,17 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
     # 按探测到的可用源顺序尝试(避免被屏蔽的源白等超时)
     df = pd.DataFrame()
     for src in _probe_sources():
-        if src == "tushare":
-            df = _kline_from_tushare(code, period, limit, adjust)
-        elif src == "eastmoney":
-            df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
-        elif src == "sina":
-            df = _kline_from_sina(code, period, limit)
-        elif src == "tencent":
-            df = _kline_from_tencent(code, period, limit, adjust, retry=1, timeout=3)
+        try:
+            if src == "tushare":
+                df = _kline_from_tushare(code, period, limit, adjust)
+            elif src == "eastmoney":
+                df = _kline_from_eastmoney(code, klt, fqt, params_base, limit)
+            elif src == "sina":
+                df = _kline_from_sina(code, period, limit)
+            elif src == "tencent":
+                df = _kline_from_tencent(code, period, limit, adjust, retry=1, timeout=3)
+        except Exception:
+            df = pd.DataFrame()
         if df is not None and not df.empty:
             break
     if df is None:
@@ -696,16 +709,15 @@ def get_financials(code, market="SH", limit=8):
 # 5. 股票搜索（东方财富）
 # ---------------------------------------------------------------
 def search_stocks(keyword, limit=10):
-    """按名称/代码搜索 A 股，返回 list[dict]"""
-    url = "https://search-codetable.eastmoney.com/codetable/search/web"
-    params = {"client": "web", "keyword": keyword,
-              "pageIndex": "1", "pageSize": str(limit)}
+    """按名称/代码搜索 A 股，返回 list[dict]。东财优先，失败/无结果回退腾讯智能搜索。"""
+    out = []
     try:
-        d = _get_json(url, params, retry=1, sleep=0.2, timeout=5)
+        url = "https://search-codetable.eastmoney.com/codetable/search/web"
+        params = {"client": "web", "keyword": keyword,
+                  "pageIndex": "1", "pageSize": str(limit)}
+        d = _get_json(url, params, retry=1, sleep=0.2, timeout=4)
         rows = (d.get("result") or []) if d.get("code") == "0" else []
-        out = []
         for row in rows:
-            # 仅保留 A 股（沪A/深A/京A）
             tname = row.get("securityTypeName", "")
             if not any(k in tname for k in ("沪A", "深A", "京A", "沪市", "深市", "北交所")):
                 continue
@@ -714,9 +726,34 @@ def search_stocks(keyword, limit=10):
                 "name": row["shortName"],
                 "market": tname,
             })
-        return out
     except Exception:
-        return []
+        pass
+    if out:
+        return out[:limit]
+    # 兜底: 腾讯智能搜索（GBK编码, v_hint="sh~600519~贵州茅台~gzmt~GP-A"）
+    try:
+        r = requests.get("https://smartbox.gtimg.cn/s3/",
+                         params={"v": "2", "q": keyword, "t": "all"}, timeout=5)
+        r.encoding = "gbk"
+        txt = r.text
+        import re as _re
+        m = _re.search(r'v_hint="([^"]*)"', txt)
+        if m:
+            for item in m.group(1).split(";"):
+                p = item.split("~")
+                if len(p) < 5:
+                    continue
+                mkt, code, name, _, typ = p[0], p[1], p[2], p[3], p[4]
+                if "GP-B" in typ or not code.isdigit():
+                    continue
+                out.append({
+                    "code": code,
+                    "name": name,
+                    "market": {"sh": "沪A", "sz": "深A", "bj": "北交所"}.get(mkt, mkt),
+                })
+    except Exception:
+        pass
+    return out[:limit]
 
 
 # ---------------------------------------------------------------
