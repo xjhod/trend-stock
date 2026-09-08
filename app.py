@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.23"
+_BACKEND_VERSION = "1.9.24"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -680,6 +680,104 @@ def api_positions_del(code):
 def api_version():
     """返回后端实际运行的版本号（用于前端展示，便于排查后端是否已更新）"""
     return jsonify({"ok": True, "version": _BACKEND_VERSION, "app": "趋势全景"})
+
+
+# ---------------- 数据源诊断与管理 ----------------
+SRC_LABELS = {
+    "tushare": "Tushare(需token)",
+    "eastmoney": "东方财富",
+    "tencent": "腾讯行情",
+    "sina": "新浪财经",
+}
+_SRC_PROBE_FUNCS = {
+    "tushare": lambda: df._kline_from_tushare("600519", "daily", 3, "qfq"),
+    "eastmoney": lambda: df._kline_from_eastmoney(
+        "sh600519", 101, 1, {
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+            "ut": "7eea3edcaed734bea9cbfc24409ed989",
+            "beg": "20220101", "end": "20500101"}, 3),
+    "tencent": lambda: df._kline_from_tencent("sh600519", "daily", 3, "qfq"),
+    "sina": lambda: df._kline_from_sina("sh600519", "daily", 3),
+}
+DATA_SOURCE_CFG_FILE = os.path.join(BASE_DIR, "data_source.json")
+
+
+def _load_source_cfg():
+    """读取用户手动指定的数据源配置（不存在则自动模式）"""
+    try:
+        with open(DATA_SOURCE_CFG_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict) and d.get("mode"):
+            return d
+    except Exception:
+        pass
+    return {"mode": "auto", "src": ""}
+
+
+@app.route("/api/diag/sources")
+def api_diag_sources():
+    """实时测试各K线数据源连通性，返回状态+耗时+当前优先级"""
+    results = []
+    for name, fn in _SRC_PROBE_FUNCS.items():
+        t0 = time.time()
+        ok = False
+        err = ""
+        try:
+            _d = fn()
+            ok = _d is not None and not _d.empty
+            if not ok:
+                err = "返回空数据"
+        except Exception as e:  # noqa
+            err = str(e)[:60]
+        results.append({
+            "src": name, "label": SRC_LABELS.get(name, name),
+            "ok": ok, "ms": int((time.time() - t0) * 1000), "err": err,
+        })
+    cfg = _load_source_cfg()
+    return jsonify({
+        "ok": True,
+        "order": df.source_order(),
+        "cfg": cfg,
+        "results": results,
+    })
+
+
+@app.route("/api/diag/sources/reset", methods=["POST"])
+def api_diag_sources_reset():
+    """删除探测缓存，强制重新探测可用源"""
+    try:
+        os.remove(df._SOURCE_ORDER_FILE)
+    except Exception:
+        pass
+    df._SOURCE_ORDER = None
+    order = df.source_order()
+    return jsonify({"ok": True, "order": order})
+
+
+@app.route("/api/diag/sources/set", methods=["POST"])
+def api_diag_sources_set():
+    """手动指定首选数据源: mode=auto 自动 / mode=manual 且 src 指定单源优先"""
+    d = request.get_json(force=True) or {}
+    mode = d.get("mode", "auto")
+    src = d.get("src", "")
+    if mode not in ("auto", "manual"):
+        return jsonify({"ok": False, "msg": "mode 仅支持 auto/manual"})
+    if mode == "manual" and src not in _SRC_PROBE_FUNCS:
+        return jsonify({"ok": False, "msg": "未知数据源: %s" % src})
+    try:
+        with open(DATA_SOURCE_CFG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"mode": mode, "src": src}, f, ensure_ascii=False, indent=2)
+        # 手动模式生效: 清缓存并强制重探测（探测逻辑会读配置）
+        df._SOURCE_ORDER = None
+        try:
+            os.remove(df._SOURCE_ORDER_FILE)
+        except Exception:
+            pass
+        order = df.source_order()
+        return jsonify({"ok": True, "order": order, "cfg": {"mode": mode, "src": src}})
+    except Exception as e:  # noqa
+        return jsonify({"ok": False, "msg": "保存失败: %s" % str(e)[:60]})
 
 
 @app.route("/")

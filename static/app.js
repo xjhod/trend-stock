@@ -2098,6 +2098,65 @@
   // 启动静默检查：有新版才提示，避免打扰
   setTimeout(function () { checkUpdate(true); }, 4000);
 
+  // ---------- 数据源管理（查看接口连通 / 重新探测 / 手动指定首选源） ----------
+  function openSources() {
+    const m = document.getElementById("src-modal");
+    if (m) m.style.display = "flex";
+    refreshSources();
+  }
+  window.__openSources = openSources;
+  function closeSources() {
+    const m = document.getElementById("src-modal");
+    if (m) m.style.display = "none";
+  }
+  window.__closeSources = closeSources;
+  function refreshSources() {
+    const box = document.getElementById("src-result");
+    const ord = document.getElementById("src-order");
+    if (box) box.innerHTML = "检测中…";
+    fetch("/api/diag/sources").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) { if (box) box.innerHTML = "检测失败（网络异常）"; return; }
+      if (ord) ord.textContent = (d.order && d.order.length ? d.order.join(" → ") : "无可用源");
+      if (d.cfg && d.cfg.mode === "manual" && d.cfg.src) {
+        const sel = document.getElementById("src-pick");
+        if (sel) sel.value = d.cfg.src;
+      }
+      if (box) {
+        let h = "<div style='margin-bottom:8px'>各接口连通性（用贵州茅台短K线实测）：</div>";
+        (d.results || []).forEach(function (s) {
+          const cls = s.ok ? "color:#27ae60" : "color:#e74c3c";
+          h += "<div class='cfg-row'><span>" + s.label + "</span><span style='" + cls + "'>" +
+            (s.ok ? "✓ 可用" : "✗ 失败") + " <span style='font-size:11px;color:#888'>" + s.ms + "ms" +
+            (s.err ? " · " + s.err : "") + "</span></span></div>";
+        });
+        box.innerHTML = h;
+      }
+    }).catch(function () { if (box) box.innerHTML = "检测失败（网络异常）"; });
+  }
+  function srcReset() {
+    fetch("/api/diag/sources/reset", { method: "POST" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok) refreshSources();
+    });
+  }
+  window.__srcReset = srcReset;
+  function srcSave() {
+    const sel = document.getElementById("src-pick");
+    const mode = sel.value === "auto" ? "auto" : "manual";
+    fetch("/api/diag/sources/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: mode, src: sel.value })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok) {
+        alert("已生效，当前优先级：" + (d.order || []).join(" → ") + "\nK线加载将使用新顺序。");
+        refreshSources();
+      } else {
+        alert("保存失败：" + ((d && d.msg) || "未知错误"));
+      }
+    }).catch(function () { alert("网络异常，保存失败"); });
+  }
+  window.__srcSave = srcSave;
+
   // ---------- 顶部市场模式切换（常驻可见，一键牛熊） ----------
   function loadModeSwitch() {
     const sel = document.getElementById("ms-mode");

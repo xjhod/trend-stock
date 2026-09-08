@@ -361,7 +361,8 @@ def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
         df = _TUSHARE_DAILY_CACHE[cache_key].copy()
     else:
         data = _tushare_request("daily", {"ts_code": ts_code, "start_date": start, "end_date": end},
-                                 "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount")
+                                 "ts_code,trade_date,open,high,low,close,pre_close,change,pct_chg,vol,amount",
+                                 timeout=5)
         if not data or not data.get("items"):
             return pd.DataFrame()
         fields = data["fields"]
@@ -405,7 +406,8 @@ def _kline_from_tushare(code, period="daily", limit=300, adjust="qfq"):
     if adjust in ("qfq", "hfq"):
         adj = _tushare_request("adj_factor",
                                 {"ts_code": ts_code, "start_date": start, "end_date": end},
-                                "ts_code,trade_date,adj_factor")
+                                "ts_code,trade_date,adj_factor",
+                                timeout=5)
         if adj and adj.get("items"):
             adj_map = {it[1]: float(it[2]) for it in adj["items"]}
             df["adj_factor"] = df["date"].map(adj_map).ffill().fillna(1.0)
@@ -457,11 +459,41 @@ def _quick_check_source(src):
     return False
 
 
+def _manual_source_cfg():
+    """读取用户手动指定的数据源（data_source.json: {"mode":"manual","src":"tushare"}）"""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_source.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict) and d.get("mode") == "manual" and d.get("src"):
+            return d["src"]
+    except Exception:
+        pass
+    return None
+
+
 def _probe_sources():
-    """探测东财/新浪/腾讯连通性, 返回可用源顺序(可用在前). 当天缓存到文件, 进程内只探测一次."""
+    """探测东财/新浪/腾讯连通性, 返回可用源顺序(可用在前). 当天缓存到文件, 进程内只探测一次.
+    支持手动指定源(data_source.json): 指定源可用则只用它, 不可用则回退自动探测."""
     global _SOURCE_ORDER
     if _SOURCE_ORDER is not None:
         return _SOURCE_ORDER
+    # 手动指定源优先
+    manual = _manual_source_cfg()
+    if manual:
+        try:
+            if _quick_check_source(manual):
+                _SOURCE_ORDER = [manual]
+                return _SOURCE_ORDER
+        except Exception:
+            pass
+        # 手动源不可用 → 清掉配置避免下次反复白等，并继续自动探测
+        try:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_source.json")
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
     # 先读当天缓存文件(避免每次启动都花几秒探测)
     try:
         with open(_SOURCE_ORDER_FILE, encoding="utf-8") as f:

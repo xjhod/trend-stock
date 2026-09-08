@@ -17,6 +17,7 @@
     <button class="rules-btn" onclick="window.__openRules()" title="所有规则与使用顺序">规则手册</button>
     <button class="rules-btn" onclick="window.__openConfig()" title="微信/短信推送配置与每日自动扫描">推送设置</button>
     <button class="rules-btn" onclick="window.__checkUpdate()" title="检查 GitHub 上的新版本并一键更新">检查更新</button>
+    <button class="rules-btn" onclick="window.__openSources()" title="查看K线数据源连通状态、重新探测或手动指定首选源">数据源</button>
     <button class="rules-btn lowkey-btn" id="lowkey-btn" title="低调模式：切换成普通办公系统外观（Alt+Q）">低调</button>
     <div class="topbar-right" id="market-status"></div>
     <div class="mode-switch" id="mode-switch">
@@ -221,6 +222,33 @@
     <div class="bt-foot">
       <button class="modal-btn primary" id="pt-refresh">重新测试</button>
       <button class="modal-btn" onclick="window.__closePt()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 数据源管理弹窗 -->
+<div class="modal-mask" id="src-modal" style="display:none">
+  <div class="modal cfg-modal">
+    <div class="modal-title">K线数据源 <span class="bt-sub">查看连通状态 · 重新探测 · 手动指定</span></div>
+    <div class="modal-desc">K线依次从「数据源优先级」从上到下取数，取不到自动换下一个。若某个源在你网络下被屏蔽，可手动指定可用的源作为首选。当前优先级：<b id="src-order">-</b></div>
+    <div class="cfg-body" id="src-result">检测中…</div>
+    <div class="cfg-sec">
+      <div class="cfg-title">首选源设置</div>
+      <div class="cfg-row">
+        <span>首选数据源</span>
+        <select id="src-pick">
+          <option value="auto">自动（探测可用源）</option>
+          <option value="tushare">Tushare（需token，复权准）</option>
+          <option value="tencent">腾讯行情</option>
+          <option value="sina">新浪财经</option>
+          <option value="eastmoney">东方财富</option>
+        </select>
+      </div>
+    </div>
+    <div class="bt-foot">
+      <button class="modal-btn" onclick="window.__srcReset()">重新探测</button>
+      <button class="modal-btn primary" onclick="window.__srcSave()">保存并生效</button>
+      <button class="modal-btn" onclick="window.__closeSources()">关闭</button>
     </div>
   </div>
 </div>
