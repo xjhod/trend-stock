@@ -2205,7 +2205,8 @@
       indData = data;
       const upN = data.total_up || 0;
       const totalN = data.total_ind || 0;
-      if (infoEl) infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个（市值≥30亿）";
+      const indepN = data.total_indep || 0;
+      if (infoEl) infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个" + (indepN ? " · 独立行情 " + indepN + " 个" : "") + "（市值≥30亿）";
       listEl.innerHTML = "";
       (data.items || []).forEach(function (it, idx) {
         const div = document.createElement("div");
@@ -2218,16 +2219,21 @@
         // 强度标签
         const strengthCls = it.strength === "strong" ? "strong" : (it.strength === "medium" ? "medium" : "weak");
         const strengthText = it.strength === "strong" ? "强" : (it.strength === "medium" ? "中" : "弱");
+        // 独立行情徽标：行业强 + 大盘不强，已置顶
+        const indepTag = it.independent ? '<span class="ind-strength-tag" style="background:#7c3aed;color:#fff">独立行情</span>' : '';
+        const indepMeta = it.independent ? '<span style="color:#7c3aed;font-size:11px">跑赢大盘+' + it.excess + '%</span>' : '';
         div.innerHTML =
           '<div class="ind-name">' +
             '<span style="color:' + dirColor + ';font-size:12px;width:18px">' + dirArrow + '</span>' +
             '<span>' + it.name + '</span>' +
+            indepTag +
             (dir === "up" ? '<span class="ind-strength-tag ' + strengthCls + '">' + strengthText + '</span>' : '') +
             '<span class="ind-score" style="margin-left:auto">' + it.score + '</span>' +
           '</div>' +
           '<div class="ind-meta">' +
             '<span style="color:' + dirColor + ';font-size:11px">' + dirText + '</span>' +
             '<span class="ind-ret" style="color:' + (it.ret20 >= 0 ? 'var(--up)' : 'var(--down)') + '">20日 ' + (it.ret20 >= 0 ? '+' : '') + it.ret20 + '%</span>' +
+            indepMeta +
             '<span class="ind-count">' + it.stock_count + ' 只</span>' +
           '</div>';
         div.addEventListener("click", function () {

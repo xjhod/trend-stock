@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.25"
+_BACKEND_VERSION = "1.9.26"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -830,16 +830,62 @@ def _diag_market():
 
 
 def _diag_industry(ind_name):
-    """行业环境: 20日动量 + 方向"""
+    """行业环境: 20日动量 + 方向 + 独立行情"""
     rows = layers._load_ind_cache().get(ind_name, [])
     closes = [r["close"] for r in rows]
     if len(closes) < 25:
-        return {"name": ind_name or "未知", "state": "unknown", "mom20": None, "direction": "unknown"}
+        return {"name": ind_name or "未知", "state": "unknown", "mom20": None, "direction": "unknown",
+                "independent": False, "excess": 0, "streak": 0}
     c = closes[-1]
     mom20 = c / closes[-21] - 1
     direction = layers._direction(closes)
     state = "向上" if direction == "up" else ("向下" if direction == "down" else "横盘")
-    return {"name": ind_name or "未知", "state": state, "mom20": round(mom20 * 100, 1), "direction": direction}
+    indep, excess, _mkt_mom, streak = _ind_independent(rows)
+    return {"name": ind_name or "未知", "state": state, "mom20": round(mom20 * 100, 1), "direction": direction,
+            "independent": indep, "excess": excess, "streak": streak}
+
+
+def _ind_independent(rows, mkt_rows=None):
+    """判断行业是否处于"独立行情"：
+    ① 行业20日动量 ≥ +3%  ② 大盘20日动量 < +1%（不强）
+    ③ 超额(行业−大盘) ≥ +3个百分点  ④ 连续满足 ≥ 3天（排除单日噪音）
+    返回 (independent, excess_pct, mkt_mom20_pct, streak_days)
+    """
+    if mkt_rows is None:
+        mkt_rows = _safe_call(layers.get_market_kline, [])
+    if not rows or len(rows) < 25 or len(mkt_rows) < 21:
+        return False, 0, None, 0
+    closes = [r["close"] for r in rows]
+    dates = [r["date"] for r in rows]
+    mkt_dates = [r["date"] for r in mkt_rows]
+    mkt_closes = [r["close"] for r in mkt_rows]
+    import bisect
+
+    def mkt_mom(d):
+        j = bisect.bisect_right(mkt_dates, d) - 1
+        if j < 21:
+            return None
+        return mkt_closes[j] / mkt_closes[j - 21] - 1
+
+    streak = 0
+    excess = 0.0
+    for i in range(len(rows) - 1, 20, -1):
+        mm = mkt_mom(dates[i])
+        if mm is None:
+            break
+        ind_mom = closes[i] / closes[i - 21] - 1
+        ex = (ind_mom - mm) * 100
+        if ind_mom * 100 >= 3 and mm * 100 < 1 and ex >= 3:
+            streak += 1
+            excess = ex
+        else:
+            break
+    mm_cur = mkt_mom(dates[-1])
+    if mm_cur is None:
+        return False, 0, None, streak
+    ind_cur = closes[-1] / closes[-21] - 1
+    independent = streak >= 3 and ind_cur * 100 >= 3 and mm_cur * 100 < 1
+    return independent, round(excess, 1), round(mm_cur * 100, 1), streak
 
 
 def _diag_features(code, dk):
@@ -1013,6 +1059,16 @@ def _diag_verdict(fund, pos, env, feat):
 def _diag_env(mkt, ind, feat):
     """环境评级: operable/caution/avoid"""
     g = mkt.get("grade", 2)
+    # 行业独立行情: 行业强且大盘不强 → 以行业为准, 大盘退居参考
+    if ind.get("independent") and g >= 1:
+        if feat["above_ma20"] or feat["mom20"] > 0:
+            ind_mom = ind.get("mom20")
+            mkt_mom = mkt.get("mom20")
+            return {"grade": "operable",
+                    "note": ("该行业正走独立行情（行业20日%+.1f%% vs 大盘%+.1f%%，跑赢%.1f个百分点，"
+                             "已持续%d天），以行业趋势为主，个股顺行业可参与。") % (
+                        ind_mom, mkt_mom, ind.get("excess", 0), ind.get("streak", 0))}
+        return {"grade": "caution", "note": "行业独立行情但个股走弱，等待个股转强再参与。"}
     if g <= 1 or (mkt.get("dd60") or 0) < -10:
         grade = "avoid" if g == 0 else "caution"
     elif g == 2:
@@ -1132,29 +1188,38 @@ def _calc_ind_trend(rows):
 
 @app.route("/api/industry/trend")
 def api_industry_trend():
-    """行业趋势看板：返回趋势向上的前20个行业，按强度排序"""
+    """行业趋势看板：趋势向上行业 + 独立行情标记（置顶）"""
     ind_cache = layers._load_ind_cache()
     try:
         with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
             pool = json.load(f)
     except Exception:
         pool = []
+    mkt_rows = _safe_call(layers.get_market_kline, [])
+    mkt_mom20 = None
+    if len(mkt_rows) >= 21:
+        mkt_mom20 = round((mkt_rows[-1]["close"] / mkt_rows[-21]["close"] - 1) * 100, 1)
     results = []
     for ind_name, rows in ind_cache.items():
         if not ind_name or ind_name == "未知" or len(rows) < 25:
             continue
         direction, strength, score, ma20_slope, ret20 = _calc_ind_trend(rows)
         count = sum(1 for s in pool if s.get("ind") == ind_name)
+        indep, excess, _mm, streak = _ind_independent(rows, mkt_rows)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
             "stock_count": count, "latest_close": round(rows[-1]["close"], 2),
+            "independent": indep, "excess": excess, "streak": streak,
         })
-    # 排序：up 排前面（按score降序），sideways 中间，down 排后面
+    # 排序：独立行情置顶（按跑赢幅度降序），up 排前（按score降序），sideways 中间，down 排后
     dir_rank = {"up": 0, "sideways": 1, "down": 2}
-    results.sort(key=lambda x: (dir_rank.get(x["direction"], 3), -x["score"]))
+    results.sort(key=lambda x: (0 if x["independent"] else 1 + dir_rank.get(x["direction"], 3),
+                                -x["excess"] if x["independent"] else -x["score"]))
     total_up = sum(1 for r in results if r["direction"] == "up")
-    return jsonify({"ok": True, "total_up": total_up, "total_ind": len(results), "items": results})
+    total_indep = sum(1 for r in results if r["independent"])
+    return jsonify({"ok": True, "total_up": total_up, "total_ind": len(results),
+                    "total_indep": total_indep, "mkt_mom20": mkt_mom20, "items": results})
 
 
 @app.route("/api/industry/<ind_name>/stocks")
