@@ -234,26 +234,32 @@ def _kline_from_tencent(code, period="daily", limit=300, adjust="qfq", retry=4, 
     }
     try:
         if adjust in ("qfq", "hfq"):
-            url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+            urls = ["https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+                    "https://ifzq.gtimg.cn/appstock/app/fqkline/get"]
             params = {"param": f"{sym},{klt},,,{limit},{adjust}"}
         else:
-            url = "https://web.ifzq.gtimg.cn/appstock/app/kline/kline"
+            urls = ["https://web.ifzq.gtimg.cn/appstock/app/kline/kline",
+                    "https://ifzq.gtimg.cn/appstock/app/kline/kline"]
             params = {"param": f"{sym},{klt},,{limit}"}
         lines = []
         for i in range(retry):
             try:
-                r = requests.get(url, params=params, headers=_hdr, timeout=timeout)
-                if r.status_code != 200:
-                    time.sleep(1.0 + i)
-                    continue
-                d = r.json()
-                if not isinstance(d, dict) or d.get("code") != 0:
-                    time.sleep(1.0 + i)
-                    continue
-                node = (d.get("data") or {}).get(sym) or {}
-                # 腾讯返回列序: [date, open, close, high, low, volume]
-                key = "qfqday" if adjust == "qfq" else ("hfqday" if adjust == "hfq" else "day")
-                lines = node.get(key) or node.get("day") or []
+                for url in urls:
+                    try:
+                        r = requests.get(url, params=params, headers=_hdr, timeout=timeout)
+                        if r.status_code != 200:
+                            continue  # 该域名不可用, 试下一个
+                        d = r.json()
+                        if not isinstance(d, dict) or d.get("code") != 0:
+                            continue
+                        node = (d.get("data") or {}).get(sym) or {}
+                        # 腾讯返回列序: [date, open, close, high, low, volume]
+                        key = "qfqday" if adjust == "qfq" else ("hfqday" if adjust == "hfq" else "day")
+                        lines = node.get(key) or node.get("day") or []
+                        if lines:
+                            break  # 拿到真实数据
+                    except Exception:
+                        continue
                 if lines:
                     break  # 拿到真实数据
                 time.sleep(1.5 + i)  # data为空=限流，等待后重试

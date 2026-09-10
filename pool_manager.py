@@ -247,3 +247,53 @@ def pool_info():
     except Exception:
         cur = 0
     return {"threshold": get_threshold(), "cand_counts": info, "current_pool": cur}
+
+
+def refresh_ind_cache(workers=8):
+    """轻量刷新行业指数：仅用现有高适配池成分股合成（不重建池、不重新筛选全市场）。
+    每日扫描后调用一次，让行业指数自动更新到最新；单行业成分<5只或拉取失败则跳过/兜底保留旧值。
+    返回 dict: {ok, ind_count, rows, elapsed}
+    """
+    t0 = time.time()
+    try:
+        pool = json.load(open(HIGHFIT_FILE, encoding="utf-8"))
+    except Exception as e:
+        return {"ok": False, "msg": f"高适配池读取失败: {e}"}
+    if not pool:
+        return {"ok": False, "msg": "高适配池为空，请先重建池"}
+
+    def _one(it):
+        code = it.get("code")
+        if not code:
+            return None
+        try:
+            df = get_kline(code, "daily", 300, "qfq")
+            if df is None or len(df) < 60:
+                return None
+            return (code, df)
+        except Exception:
+            return None
+
+    klines = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(_one, it) for it in pool]
+        for f in as_completed(futs):
+            try:
+                r = f.result()
+                if r:
+                    klines[r[0]] = (r[1], None)
+            except Exception:
+                continue
+    if not klines:
+        return {"ok": False, "msg": "成分股K线拉取全部失败（网络/数据源问题）"}
+
+    ind_cache = _build_ind_cache(pool, klines)
+    ind_cache = _merge_ind_cache(ind_cache)
+    try:
+        with open(IND_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(ind_cache, f, ensure_ascii=False)
+    except Exception as e:
+        return {"ok": False, "msg": f"写入行业指数缓存失败: {e}"}
+    n = sum(len(v) for v in ind_cache.values())
+    return {"ok": True, "ind_count": len(ind_cache), "rows": n,
+            "elapsed": round(time.time() - t0, 1), "pool_size": len(pool)}

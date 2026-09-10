@@ -14,6 +14,7 @@ from data_fetcher import get_kline
 import layers
 import analysis as an
 import env_judge
+import pool_manager
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 HIGHFIT_FILE = os.path.join(BASE, "highfit_pool.json")
@@ -859,6 +860,15 @@ def run_scan(limit=None, workers=4):
         json.dump(out, open(SIGNALS_FILE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         _last_scan.update(running=False, date=out["date"], ok=True,
                           msg=f"完成, {len(signals)} 只机会", count=len(signals))
+    # 扫描完成后顺带轻量刷新行业指数（不重建池，成分股K线按需拉取合成），
+    # 避免行业指数长期停在旧日期；失败不影响扫描结果
+    try:
+        ind_ok = pool_manager.refresh_ind_cache(workers=workers)
+        if ind_ok.get("ok"):
+            out["ind_cache"] = {"updated": True, "ind_count": ind_ok["ind_count"],
+                                "rows": ind_ok["rows"], "elapsed": ind_ok["elapsed"]}
+    except Exception as e:
+        out["ind_cache"] = {"updated": False, "err": str(e)}
     return {"ok": True, **{k: out[k] for k in ("date", "updated_at", "scanned", "elapsed_sec", "signals", "env")}}
 
 
