@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.27"
+_BACKEND_VERSION = "1.9.28"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -33,6 +33,15 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 _lock = threading.Lock()
 POOL_BUILD_STATE = {"state": "idle", "msg": "", "progress": 0, "result": None}
 INDUSTRY_STOCKS_CACHE = {}
+
+
+@app.after_request
+def _no_cache(resp):
+    """本地软件：全部响应不缓存，杜绝「更新后还是旧界面」（浏览器缓存旧JS/HTML）"""
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 # ---------------------------------------------------------------
 # 工具

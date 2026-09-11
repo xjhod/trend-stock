@@ -2178,14 +2178,15 @@
     const sc = document.getElementById("ms-score");
     if (!sel) return;
     fetch("/api/env").then(r => r.json()).then(function (ev) {
+      const lowkey = document.body.classList.contains("lowkey");
       if (ev && ev.det && ev.det.regime) renderRegime(ev.det.regime);
       if (ev && ev.score !== undefined && ev.score !== null) {
         if (sc) {
-          sc.textContent = ev.score + "/6";
+          sc.textContent = lowkey ? "--" : (ev.score + "/6");
           sc.className = "env-badge" + (ev.score >= ev.threshold ? " hi" : " lo");
           sc.title = "市场环境评分（6分制）";
         }
-        sel.value = ev.mode || "auto";
+        sel.value = lowkey ? "auto" : (ev.mode || "auto");
       } else if (sc) {
         sc.textContent = "--";
       }
