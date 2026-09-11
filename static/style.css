@@ -65,7 +65,7 @@ body.lowkey .ind-item.active { background:rgba(47,111,237,.10); border-left-colo
 body.lowkey .lowkey-btn { border-color:#b9c0c9; color:#5b6470; }
 body.lowkey .lowkey-btn:hover { border-color:#2f6fed; color:#2f6fed; }
 body.lowkey .env-badge { background:rgba(47,111,237,.10); color:#2f6fed; }
-body.lowkey .regime-badge { display:none !important; }
+body.lowkey .regime-badge { background:transparent; color:#8a929c; font-weight:400; padding:1px 6px; }
 body.lowkey .topbar-right { color:#69707a; }
 /* 低调模式：默认隐藏空状态提示与K线详情，只显示简洁工作表 */
 body.lowkey #empty-state { display:none !important; }

@@ -2162,9 +2162,13 @@
     const el = document.getElementById("ms-regime");
     if (!el) return;
     if (!reg || !reg.state) { el.style.display = "none"; return; }
+    window.__lastRegime = reg;
     const attack = ["健康牛", "深熊底"].indexOf(reg.state) >= 0;
     const avoid = ["熊市反弹", "牛深回调"].indexOf(reg.state) >= 0;
-    el.textContent = "环境·" + reg.state + "  +60日" + reg.up60 + "%";
+    const lowkey = document.body.classList.contains("lowkey");
+    el.textContent = lowkey
+      ? ("市况·" + reg.state)
+      : ("环境·" + reg.state + "  +60日" + reg.up60 + "%");
     el.className = "regime-badge " + (attack ? "hi" : (avoid ? "lo" : "mid"));
     el.title = reg.desc + "\n16年回测: 该状态后60日上涨率" + reg.up60 + "%, 平均收益" + reg.avg60;
     el.style.display = "inline-block";
@@ -2442,6 +2446,11 @@
     document.body.classList.remove("lowkey-hide-table");
     if (on) renderLowkeyTable();
     else { const el = document.getElementById("lowkey-table"); if (el) el.innerHTML = ""; }
+    // 五态徽标随低调模式切换文案（市况·x / 环境·x）
+    try {
+      const rg = window.__lastRegime;
+      if (rg && rg.state) renderRegime(rg);
+    } catch (e) {}
     document.title = LOWKEY_TEXT.title[on ? 1 : 0];
     const logo = document.querySelector(".logo");
     if (logo) logo.innerHTML = LOWKEY_TEXT.logo[on ? 1 : 0];
