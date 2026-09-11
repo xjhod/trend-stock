@@ -41,6 +41,7 @@
         <button class="s-tab" id="tab-paper" title="今日机会虚拟买入，每日跟踪，按规则决定卖出（20日实验）">模拟持仓</button>
         <button class="s-tab" id="tab-pos" title="登记你的真实持仓（买入日期/价格），只有持仓股会显示卖出提示">我的持仓</button>
         <button class="s-tab" id="tab-industry" title="全部行业趋势看板：第一级看行业趋势，点击行业看全部个股">行业轮动</button>
+        <button class="s-tab" id="tab-lowpos" title="大盘深熊底进攻信号：超跌反转 + 领先股（逆周期工具，非深熊底不触发）">低位机会</button>
       </div>
       <div id="panel-watch">
         <div class="add-box">
@@ -103,6 +104,14 @@
           </div>
           <div class="scan-list" id="ind-stocks-list"></div>
         </div>
+      </div>
+      <div id="panel-lowpos" style="display:none">
+        <div class="hf-toolbar">
+          <span id="lowpos-info">低位机会加载中…</span>
+          <button class="hf-refresh" id="lowpos-run" title="扫描高适配池，计算个股五态并分组（约2-4分钟）">▶ 扫描</button>
+        </div>
+        <div class="lowpos-env" id="lowpos-env"></div>
+        <div class="lowpos-groups" id="lowpos-groups"></div>
       </div>
       <div class="sidebar-foot">点击股票查看趋势全景</div>
     </aside>
@@ -392,6 +401,6 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=1928"></script>
+<script src="app.js?v=1929"></script>
 </body>
 </html>

@@ -1569,32 +1569,41 @@
   const tabPaper = document.getElementById("tab-paper");
   const tabPos = document.getElementById("tab-pos");
   const tabIndustry = document.getElementById("tab-industry");
+  const tabLowpos = document.getElementById("tab-lowpos");
   function switchTab(name) {
     const isWatch = name === "watch";
     const isScan = name === "scan";
     const isPaper = name === "paper";
     const isPos = name === "pos";
     const isIndustry = name === "industry";
+    const isLowpos = name === "lowpos";
     tabWatch.classList.toggle("active", isWatch);
     tabScan.classList.toggle("active", isScan);
     if (tabPaper) tabPaper.classList.toggle("active", isPaper);
     if (tabPos) tabPos.classList.toggle("active", isPos);
     if (tabIndustry) tabIndustry.classList.toggle("active", isIndustry);
+    if (tabLowpos) tabLowpos.classList.toggle("active", isLowpos);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
     document.getElementById("panel-scan").style.display = isScan ? "" : "none";
     if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
     if (document.getElementById("panel-pos")) document.getElementById("panel-pos").style.display = isPos ? "" : "none";
     if (document.getElementById("panel-industry")) document.getElementById("panel-industry").style.display = isIndustry ? "" : "none";
+    if (document.getElementById("panel-lowpos")) document.getElementById("panel-lowpos").style.display = isLowpos ? "" : "none";
     if (isScan) renderScanList();
     if (isPaper) renderPaper();
     if (isPos) renderPositions();
     if (isIndustry) loadIndustryTrend();
+    if (isLowpos) renderLowPos();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
   tabScan.addEventListener("click", function () { switchTab("scan"); });
   if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
   if (tabIndustry) tabIndustry.addEventListener("click", function () { switchTab("industry"); });
+  if (tabLowpos) {
+    tabLowpos.addEventListener("click", function () { switchTab("lowpos"); });
+    document.getElementById("lowpos-run").addEventListener("click", function () { runLowPosScan(); });
+  }
   // 行业轮动：重建高适配池
   document.getElementById("ind-rebuild").addEventListener("click", function () { rebuildHighfitPool(); });
   async function rebuildHighfitPool() {
@@ -1733,6 +1742,88 @@
       if (trend.length) html += '<div class="scan-group-title">趋势机会 · 追涨（' + trend.length + '）</div>' + trend.map(itemHtml).join("");
       listEl.innerHTML = html;
       listEl.querySelectorAll(".scan-item").forEach(function (el) {
+        el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
+      });
+    }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
+  }
+
+  // ---------- 低位机会（深熊底进攻信号：大盘开关 × 个股标的） ----------
+  let lowposPollTimer = null;
+  function stopLowposPoll() { if (lowposPollTimer) { clearInterval(lowposPollTimer); lowposPollTimer = null; } }
+  function runLowPosScan() {
+    const infoEl = document.getElementById("lowpos-info");
+    fetch("/api/lowpos/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then(r => r.json()).then(function (d) {
+        if (!d.ok) { if (infoEl) infoEl.textContent = d.msg || "扫描失败"; return; }
+        if (infoEl) infoEl.textContent = "已开始后台扫描（约2-4分钟），完成后自动刷新…";
+        startLowposPoll();
+      }).catch(function () { if (infoEl) infoEl.textContent = "启动扫描失败（服务异常）"; });
+  }
+  function startLowposPoll() {
+    stopLowposPoll();
+    lowposPollTimer = setInterval(function () {
+      fetch("/api/lowpos").then(r => r.json()).then(function (d) {
+        const st = d.status || {};
+        if (!st.running) {
+          stopLowposPoll();
+          renderLowPos();
+        }
+      }).catch(function () {});
+    }, 3000);
+  }
+  function renderLowPos() {
+    const infoEl = document.getElementById("lowpos-info");
+    const envEl = document.getElementById("lowpos-env");
+    const groupsEl = document.getElementById("lowpos-groups");
+    if (!groupsEl) return;
+    fetch("/api/lowpos").then(r => r.json()).then(function (d) {
+      const st = d.status || {};
+      if (infoEl) {
+        if (st.running) {
+          infoEl.textContent = "扫描中 " + (st.done || 0) + "/" + (st.total || 0) + "…（约2-4分钟）";
+          startLowposPoll();
+        } else if (d.updated_at) {
+          infoEl.textContent = d.updated_at + " · 已扫 " + (d.scanned || 0) + " 只" + (d.elapsed_sec ? " · " + d.elapsed_sec + "s" : "");
+        } else {
+          infoEl.textContent = d.msg || "尚未扫描";
+        }
+      }
+      const rg = d.regime || null;
+      if (envEl) {
+        if (!rg) { envEl.innerHTML = '<div class="scan-empty">暂无环境数据</div>'; }
+        else if (!d.active) {
+          envEl.innerHTML = '<div class="lowpos-env-card off">' +
+            '<b>当前大盘：' + rg.state + '</b>（近60日站上年线 ' + rg.days_above60 + ' 天）' +
+            '<div class="lowpos-env-note">非进攻区（深熊底）——低位机会是逆周期信号，只在"大盘深熊底"时触发。<br>牛市/震荡中不强行找低位，保持空仓或按大盘门控操作。</div></div>';
+        } else {
+          envEl.innerHTML = '<div class="lowpos-env-card on">' +
+            '<b>大盘深熊底 · 进攻区激活</b>（近60日站上年线 ' + rg.days_above60 + ' 天，年线' + (rg.ma250_dir === "up" ? "上行" : "下行") + '）' +
+            '<div class="lowpos-env-note">回测：大盘深熊底 60日胜率 61%；超跌反转组（个股深熊底）71%/+17.4%，领先股组（个股健康牛）62%/+4.7%。行业=健康牛优先标星。</div></div>';
+        }
+      }
+      const over = d.over || [];
+      const lead = d.lead || [];
+      if (!over.length && !lead.length) {
+        groupsEl.innerHTML = '<div class="scan-empty">暂无符合条件的个股<br><span>点击"▶ 扫描"计算个股五态并分组（约2-4分钟）。</span></div>';
+        return;
+      }
+      const indName = { "bull_strong": "健康牛", "bear_bottom": "深熊底", "bear_rally": "熊反弹", "bull_pullback": "牛回调", "sideways": "方向不明" };
+      function itemHtml(it) {
+        const ref = it.ref || {};
+        const star = it.ind_healthy ? ' <span class="scan-type trd" title="行业健康牛（行业层过滤通过）">行业✓</span>' : "";
+        const indSt = it.ind_key ? '<span class="lowpos-ind ' + (it.ind_healthy ? "ok" : "") + '">' + it.ind + "·" + (indName[it.ind_key] || it.ind_key) + '</span>' : '<span class="lowpos-ind">' + it.ind + '</span>';
+        return '<div class="scan-item" data-code="' + it.code + '" title="点击查看图形">' +
+          '<div class="scan-item-head"><span class="scan-type ' + (it.is_lead ? "trd" : "reb") + '">' + (it.is_lead ? "领先" : "超跌") + '</span>' +
+          '<span class="scan-name">' + it.name + ' <em>' + it.code + '</em></span>' + star + '</div>' +
+          '<div class="scan-item-sub">' + indSt + " · " + it.stk_state + '</div>' +
+          '<div class="scan-tags"><span>60日参考 ' + (ref.win || "-") + '% / ' + (ref.avg || "-") + '</span></div>' +
+          '</div>';
+      }
+      let html = "";
+      if (over.length) html += '<div class="scan-group-title">超跌反转 · 个股深熊底（' + over.length + '）——弹性最大</div>' + over.map(itemHtml).join("");
+      if (lead.length) html += '<div class="scan-group-title">领先股 · 个股健康牛（' + lead.length + '）——胜率稳</div>' + lead.map(itemHtml).join("");
+      groupsEl.innerHTML = html;
+      groupsEl.querySelectorAll(".scan-item").forEach(function (el) {
         el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
       });
     }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
@@ -2412,7 +2503,7 @@
     sub: ["A股 · 一屏看全价格与基本面趋势 ", "统一数据视图 · 内部使用 "]
   };
   const LOWKEY_TABS = {
-    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪",
+    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪", "低位机会": "数据同步",
     "我的持仓": "登记台账", "行业轮动": "板块分析"
   };
   function renderLowkeyTable() {

@@ -613,3 +613,12 @@ body.lowkey #empty-state { color:#69707a; font-size:13px; }
 .diag-fsig-tag { font-size:12px; font-weight:700; color:#fff; background:#57606a; padding:2px 8px; border-radius:4px; }
 .diag-fsig-tag.up { background:var(--accent); }
 .diag-sig .fundBadge b.up { color:var(--up); } .diag-sig .fundBadge b.down { color:var(--down); }
+
+/* ---------- 低位机会（深熊底进攻信号） ---------- */
+.lowpos-env-card { padding:10px 14px; border-radius:6px; margin-bottom:10px; font-size:13px; line-height:1.6; }
+.lowpos-env-card b { font-size:14px; }
+.lowpos-env-card.on { background:#e8f5e9; border:1px solid #b7dfb9; color:#1e4d24; }
+.lowpos-env-card.off { background:var(--bg3); border:1px solid var(--border); color:var(--text-dim); }
+.lowpos-env-note { font-size:11.5px; margin-top:4px; opacity:.9; line-height:1.7; }
+.lowpos-ind { font-size:11px; color:var(--text-dim); }
+.lowpos-ind.ok { color:var(--up); font-weight:700; }

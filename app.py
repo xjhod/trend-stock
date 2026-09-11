@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.28"
+_BACKEND_VERSION = "1.9.29"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -18,6 +18,7 @@ import backtest as bt
 import data_fetcher as df
 import layers
 import scan_daily
+import low_pos
 import notify
 import updater
 import paper_trade
@@ -456,6 +457,31 @@ def api_scan_status():
     d = scan_daily.load_signals()
     d["status"] = scan_daily.scan_status()
     return jsonify(d)
+
+
+# ---------------------------------------------------------------
+# 低位机会（深熊底进攻信号：大盘开关 × 个股标的）
+# ---------------------------------------------------------------
+@app.route("/api/lowpos", methods=["GET"])
+def api_lowpos():
+    """低位机会：大盘=深熊底时激活，分组展示超跌反转 + 领先股"""
+    try:
+        d = low_pos.load_cache()
+        if d is None:
+            d = {"ok": False, "msg": "尚未扫描，点击「▶ 扫描」生成低位机会信号"}
+        d["status"] = low_pos.get_status()
+        return jsonify(d)
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"低位机会异常: {e}"}), 500
+
+
+@app.route("/api/lowpos/run", methods=["POST"])
+def api_lowpos_run():
+    try:
+        body = request.get_json(silent=True) or {}
+        return jsonify(low_pos.run_scan_async(limit=body.get("limit"), workers=body.get("workers", 6)))
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"低位机会扫描异常: {e}"}), 500
 
 
 @app.route("/api/config", methods=["GET"])
