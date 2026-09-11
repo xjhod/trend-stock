@@ -65,6 +65,7 @@ body.lowkey .ind-item.active { background:rgba(47,111,237,.10); border-left-colo
 body.lowkey .lowkey-btn { border-color:#b9c0c9; color:#5b6470; }
 body.lowkey .lowkey-btn:hover { border-color:#2f6fed; color:#2f6fed; }
 body.lowkey .env-badge { background:rgba(47,111,237,.10); color:#2f6fed; }
+body.lowkey .regime-badge { display:none !important; }
 body.lowkey .topbar-right { color:#69707a; }
 /* 低调模式：默认隐藏空状态提示与K线详情，只显示简洁工作表 */
 body.lowkey #empty-state { display:none !important; }
@@ -538,6 +539,12 @@ body.lowkey #empty-state { color:#69707a; font-size:13px; }
   background:rgba(120,130,255,.18); color:#c0c0ff; font-weight:600; }
 .env-badge.hi { background:rgba(62,207,142,.2); color:#3ecf8e; }
 .env-badge.lo { background:rgba(255,107,107,.2); color:#ff6b6b; }
+/* 五态环境徽标(16年回测: 进攻区/回避区/方向不明) */
+.regime-badge { display:inline-block; padding:1px 8px; border-radius:8px; font-size:12px; font-weight:600;
+  background:rgba(120,130,255,.18); color:#c0c0ff; cursor:help; white-space:nowrap; }
+.regime-badge.hi { background:rgba(62,207,142,.2); color:#3ecf8e; }
+.regime-badge.lo { background:rgba(255,107,107,.2); color:#ff6b6b; }
+.regime-badge.mid { background:rgba(255,180,80,.18); color:#ffb450; }
 .cfg-hint2 { font-size:11px; color:#888; margin-left:8px; }
 
 /* 顶部市场模式切换 */

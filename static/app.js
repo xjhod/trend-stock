@@ -2158,11 +2158,23 @@
   window.__srcSave = srcSave;
 
   // ---------- 顶部市场模式切换（常驻可见，一键牛熊） ----------
+  function renderRegime(reg) {
+    const el = document.getElementById("ms-regime");
+    if (!el) return;
+    if (!reg || !reg.state) { el.style.display = "none"; return; }
+    const attack = ["健康牛", "深熊底"].indexOf(reg.state) >= 0;
+    const avoid = ["熊市反弹", "牛深回调"].indexOf(reg.state) >= 0;
+    el.textContent = "环境·" + reg.state + "  +60日" + reg.up60 + "%";
+    el.className = "regime-badge " + (attack ? "hi" : (avoid ? "lo" : "mid"));
+    el.title = reg.desc + "\n16年回测: 该状态后60日上涨率" + reg.up60 + "%, 平均收益" + reg.avg60;
+    el.style.display = "inline-block";
+  }
   function loadModeSwitch() {
     const sel = document.getElementById("ms-mode");
     const sc = document.getElementById("ms-score");
     if (!sel) return;
     fetch("/api/env").then(r => r.json()).then(function (ev) {
+      if (ev && ev.det && ev.det.regime) renderRegime(ev.det.regime);
       if (ev && ev.score !== undefined && ev.score !== null) {
         if (sc) {
           sc.textContent = ev.score + "/6";

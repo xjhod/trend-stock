@@ -58,10 +58,11 @@ def _load_ind_cache():
     return _ind_cache
 
 
-def get_market_kline(limit=300):
+def get_market_kline(limit=400):
     """上证指数K线, 缓存30分钟"""
     now = time.time()
-    if _market_cache["rows"] and now - _market_cache["ts"] < 1800:
+    if _market_cache["rows"] and now - _market_cache["ts"] < 1800 \
+            and len(_market_cache["rows"]) >= limit:
         return _market_cache["rows"]
     url = "https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData"
     d = _get_json(url, {"symbol": "sh000001", "scale": 240, "ma": "no", "datalen": str(limit)}, retry=3, sleep=1)
@@ -85,6 +86,47 @@ def _direction(closes, short=20, long=60):
     if c < ma_s and ma_s < ma_l:
         return "down"
     return "side"
+
+
+# 五态环境统计（16年回测 2010-2026, 4054根上证日线, +60日上涨率/平均收益）
+REGIME_STATS = {
+    "bull_strong":  ("健康牛",   57, "+2.28%", "年线上行+价格长期在上方：顺势进攻区，可正常选行业选股"),
+    "bear_bottom":  ("深熊底",   57, "+2.38%", "年线下行+价格长期在下方：均值回归区（+120日66%），观察反转，不追跌"),
+    "bear_rally":   ("熊市反弹", 31, "-2.94%", "年线下行+价格在上方：回避区，反弹持续性差，不追高"),
+    "bull_pullback":("牛深回调", 18, "-8.75%", "年线上行+价格深跌破（近60日多在下）：最强回避区"),
+    "sideways":     ("方向不明", 36, "-0.44%", "价格与年线反复拉扯：方向不明，轻仓观望"),
+}
+
+
+def env_regime(closes):
+    """五态大盘环境（16年回测验证, 不滞后, 每天收盘可判）
+    规则: 近60日站上年线天数 d  × 年线方向(当前MA250 vs 60日前MA250)
+      d>=45且年线上行=健康牛   d>=45且年线下行=熊市反弹
+      d<=15且年线上行=牛深回调 d<=15且年线下行=深熊底
+      16<=d<=44 = 方向不明
+    返回 dict(key,state,up60,avg60,desc) 或 None(数据不足)
+    """
+    n = len(closes)
+    if n < 310:
+        return None
+    # 近60日站上年线天数
+    d = 0
+    for k in range(n - 60, n):
+        ma = sum(closes[k - 249:k + 1]) / 250
+        if closes[k] > ma:
+            d += 1
+    ma_now = sum(closes[n - 250:]) / 250
+    ma_60ago = sum(closes[n - 310:n - 60]) / 250
+    up = ma_now > ma_60ago
+    if d >= 45:
+        key = "bull_strong" if up else "bear_rally"
+    elif d <= 15:
+        key = "bull_pullback" if up else "bear_bottom"
+    else:
+        key = "sideways"
+    label, up60, avg60, desc = REGIME_STATS[key]
+    return {"key": key, "state": label, "up60": up60, "avg60": avg60, "desc": desc,
+            "days_above60": d, "above_ma250": closes[-1] > ma_now, "ma250_dir": "up" if up else "down"}
 
 
 def find_ind(code):

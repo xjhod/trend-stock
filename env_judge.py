@@ -69,10 +69,15 @@ def env_score(asof=None):
     mom20 = (c / closes[-21] - 1) * 100
     s_mom = 1 if 0 <= mom20 <= 6 else 0
     score = s_trend + s_pos + s_breadth + s_mom
+    # 五态环境（16年回测验证: 健康牛/深熊底=进攻区, 熊反弹/牛深回调/不明=回避区）
+    try:
+        regime = layers.env_regime(closes)
+    except Exception:
+        regime = None
     det = {"trend": d, "s_trend": s_trend, "dd250": round(dd250, 1), "s_pos": s_pos,
            "b_up": round(b_up, 0), "b_new": round(b_new, 1), "s_breadth": s_breadth,
            "mom20": round(mom20, 1), "s_mom": s_mom, "score": score,
-           "asof": (asof or "latest")}
+           "regime": regime, "asof": (asof or "latest")}
     return score, det
 
 

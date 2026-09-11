@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.26"
+_BACKEND_VERSION = "1.9.27"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -825,8 +825,9 @@ def _diag_market():
         state, grade = "强势", 4
     concl = "大盘深度弱市，历史实证此时超跌股反弹胜率低，控制仓位" if grade <= 1 else (
         "大盘中性/偏强，环境尚可" if grade >= 3 else "大盘偏弱，谨慎对待")
+    regime = layers.env_regime(closes)  # 五态环境(16年回测验证)
     return {"state": state, "grade": grade, "mom20": round(mom20 * 100, 1), "dd60": round(dd60 * 100, 1),
-            "direction": direction, "concl": concl}
+            "direction": direction, "concl": concl, "regime": regime}
 
 
 def _diag_industry(ind_name):
@@ -1059,6 +1060,12 @@ def _diag_verdict(fund, pos, env, feat):
 def _diag_env(mkt, ind, feat):
     """环境评级: operable/caution/avoid"""
     g = mkt.get("grade", 2)
+    # 五态环境联动: 逆势回避区(16年回测+60日上涨率仅18-31%) → 只观察不追高
+    reg = mkt.get("regime") or {}
+    if reg.get("key") in ("bear_rally", "bull_pullback"):
+        return {"grade": "caution",
+                "note": "大盘处于「%s」（16年回测后60日上涨率仅%d%%），%s；环境逆势，只观察不追高。" % (
+                    reg.get("state", ""), reg.get("up60", 0), reg.get("desc", ""))}
     # 行业独立行情: 行业强且大盘不强 → 以行业为准, 大盘退居参考
     if ind.get("independent") and g >= 1:
         if feat["above_ma20"] or feat["mom20"] > 0:

@@ -34,3 +34,6 @@ research/
 *.pkl
 *.csv
 .app.pid
+
+# 数据源本地配置(不推仓库)
+data_source.json
