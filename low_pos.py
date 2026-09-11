@@ -28,6 +28,13 @@ REF = {
 }
 
 
+def check_regime():
+    """只算大盘状态（不扫描全池），供页面初始展示"""
+    mkt = layers.get_market_kline(400)
+    closes = [r["close"] for r in mkt]
+    return layers.env_regime(closes)
+
+
 def get_status():
     with LOCK:
         return dict(_last)

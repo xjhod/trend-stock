@@ -37,8 +37,6 @@
     <aside class="sidebar">
       <div class="sidebar-tabs">
         <button class="s-tab active" id="tab-watch" title="手动添加的自选股">自选股</button>
-        <button class="s-tab" id="tab-scan" title="每日收盘后自动扫描高适配池，出现机会的股票">今日机会</button>
-        <button class="s-tab" id="tab-paper" title="今日机会虚拟买入，每日跟踪，按规则决定卖出（20日实验）">模拟持仓</button>
         <button class="s-tab" id="tab-pos" title="登记你的真实持仓（买入日期/价格），只有持仓股会显示卖出提示">我的持仓</button>
         <button class="s-tab" id="tab-industry" title="全部行业趋势看板：第一级看行业趋势，点击行业看全部个股">行业轮动</button>
         <button class="s-tab" id="tab-lowpos" title="大盘深熊底进攻信号：超跌反转 + 领先股（逆周期工具，非深熊底不触发）">低位机会</button>
@@ -51,23 +49,6 @@
         <button class="import-btn" id="import-btn" title="从同花顺导出的自选股文本批量导入">⇪ 导入自选股</button>
         <div class="search-result" id="search-result"></div>
         <ul class="watchlist" id="watchlist"></ul>
-      </div>
-      <div id="panel-scan" style="display:none">
-        <div class="hf-toolbar">
-          <span id="scan-info">今日机会加载中…</span>
-          <button class="hf-refresh" id="scan-run" title="立即扫描高适配池">▶ 扫描</button>
-          <div id="env-bar" class="env-bar" style="display:none"></div>
-        </div>
-        <div class="scan-list" id="scan-list"></div>
-      </div>
-      <div id="panel-paper" style="display:none">
-        <div class="hf-toolbar">
-          <span id="paper-info">模拟持仓加载中…</span>
-          <button class="hf-refresh" id="paper-refresh" title="更新行情并执行离场规则">↻ 更新</button>
-        </div>
-        <div class="paper-summary" id="paper-summary"></div>
-        <div class="paper-note">今日机会82只已于 2026-08-28 虚拟买入（每只10万）。每日「↻ 更新」后按规则给出离场建议，20个交易日后结算。</div>
-        <div class="scan-list" id="paper-list"></div>
       </div>
       <div id="panel-pos" style="display:none">
         <div class="pos-add">
@@ -401,6 +382,6 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=1929"></script>
+<script src="app.js?v=1930"></script>
 </body>
 </html>

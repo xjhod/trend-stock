@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.29"
+_BACKEND_VERSION = "1.9.30"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -468,7 +468,13 @@ def api_lowpos():
     try:
         d = low_pos.load_cache()
         if d is None:
-            d = {"ok": False, "msg": "尚未扫描，点击「▶ 扫描」生成低位机会信号"}
+            # 未扫描：先算大盘状态展示（非深熊底即非进攻区，秒回）
+            rg = low_pos.check_regime()
+            if rg:
+                d = {"ok": True, "active": False, "regime": rg, "over": [], "lead": [],
+                     "msg": "尚未扫描，点击「▶ 扫描」生成低位机会信号"}
+            else:
+                d = {"ok": False, "msg": "大盘数据不足"}
         d["status"] = low_pos.get_status()
         return jsonify(d)
     except Exception as e:

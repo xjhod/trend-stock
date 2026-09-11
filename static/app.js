@@ -1565,39 +1565,27 @@
 
   // Tab 切换（自选股 / 今日机会 / 模拟持仓 / 我的持仓 / 行业轮动）
   const tabWatch = document.getElementById("tab-watch");
-  const tabScan = document.getElementById("tab-scan");
-  const tabPaper = document.getElementById("tab-paper");
   const tabPos = document.getElementById("tab-pos");
   const tabIndustry = document.getElementById("tab-industry");
   const tabLowpos = document.getElementById("tab-lowpos");
   function switchTab(name) {
     const isWatch = name === "watch";
-    const isScan = name === "scan";
-    const isPaper = name === "paper";
     const isPos = name === "pos";
     const isIndustry = name === "industry";
     const isLowpos = name === "lowpos";
     tabWatch.classList.toggle("active", isWatch);
-    tabScan.classList.toggle("active", isScan);
-    if (tabPaper) tabPaper.classList.toggle("active", isPaper);
     if (tabPos) tabPos.classList.toggle("active", isPos);
     if (tabIndustry) tabIndustry.classList.toggle("active", isIndustry);
     if (tabLowpos) tabLowpos.classList.toggle("active", isLowpos);
     document.getElementById("panel-watch").style.display = isWatch ? "" : "none";
-    document.getElementById("panel-scan").style.display = isScan ? "" : "none";
-    if (document.getElementById("panel-paper")) document.getElementById("panel-paper").style.display = isPaper ? "" : "none";
     if (document.getElementById("panel-pos")) document.getElementById("panel-pos").style.display = isPos ? "" : "none";
     if (document.getElementById("panel-industry")) document.getElementById("panel-industry").style.display = isIndustry ? "" : "none";
     if (document.getElementById("panel-lowpos")) document.getElementById("panel-lowpos").style.display = isLowpos ? "" : "none";
-    if (isScan) renderScanList();
-    if (isPaper) renderPaper();
     if (isPos) renderPositions();
     if (isIndustry) loadIndustryTrend();
     if (isLowpos) renderLowPos();
   }
   tabWatch.addEventListener("click", function () { switchTab("watch"); });
-  tabScan.addEventListener("click", function () { switchTab("scan"); });
-  if (tabPaper) tabPaper.addEventListener("click", function () { switchTab("paper"); });
   if (tabPos) tabPos.addEventListener("click", function () { switchTab("pos"); });
   if (tabIndustry) tabIndustry.addEventListener("click", function () { switchTab("industry"); });
   if (tabLowpos) {
@@ -1670,12 +1658,7 @@
       }).catch(function () {});
     }, 2000);
   }
-  document.getElementById("scan-run").addEventListener("click", function () {
-    fetch("/api/scan/run", { method: "POST" }).then(r => r.json()).then(function (d) {
-      if (d.ok) startScanPoll();
-      else { const infoEl = document.getElementById("scan-info"); if (infoEl) infoEl.textContent = d.msg || "扫描失败"; }
-    }).catch(function () { const infoEl = document.getElementById("scan-info"); if (infoEl) infoEl.textContent = "扫描失败"; });
-  });
+
 
   // ---------- 市场环境条 ----------
   function renderEnvBar(env) {
@@ -1771,6 +1754,7 @@
       }).catch(function () {});
     }, 3000);
   }
+  window.__renderLowPosNow = function () { renderLowPos(); };
   function renderLowPos() {
     const infoEl = document.getElementById("lowpos-info");
     const envEl = document.getElementById("lowpos-env");
@@ -1871,14 +1855,7 @@
       });
     }).catch(function () { if (infoEl) infoEl.textContent = "加载失败"; });
   }
-  document.getElementById("paper-refresh").addEventListener("click", function () {
-    const infoEl = document.getElementById("paper-info");
-    if (infoEl) infoEl.textContent = "更新中…";
-    fetch("/api/paper/refresh", { method: "POST" }).then(r => r.json()).then(function (d) {
-      if (infoEl) infoEl.textContent = "已更新 · 今日离场 " + ((d.closed_today || []).length) + " 只";
-      renderPaper();
-    }).catch(function () { if (infoEl) infoEl.textContent = "更新失败"; });
-  });
+
 
   // ---------- 我的持仓 ----------
   function renderPositions() {
@@ -2289,8 +2266,7 @@
         .then(r => r.json()).then(function () {
           showStatus("市场模式已切换为「" + label + "」，正在自动重新扫描…");
           loadModeSwitch();
-          const sr = document.getElementById("scan-run");
-          if (sr) sr.click();   // 切换模式后自动重扫，避免显示旧模式结果
+          if (window.__renderLowPosNow) window.__renderLowPosNow();  // 模式切换后刷新低位机会（今日机会已下线）
         }).catch(function () { alert("切换失败，请重试"); });
     });
   }
@@ -2503,7 +2479,7 @@
     sub: ["A股 · 一屏看全价格与基本面趋势 ", "统一数据视图 · 内部使用 "]
   };
   const LOWKEY_TABS = {
-    "自选股": "关注列表", "今日机会": "异动监测", "模拟持仓": "流程跟踪", "低位机会": "数据同步",
+    "自选股": "关注列表", "低位机会": "数据同步",
     "我的持仓": "登记台账", "行业轮动": "板块分析"
   };
   function renderLowkeyTable() {
