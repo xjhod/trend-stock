@@ -207,6 +207,7 @@
       const data = await res.json();
       if (myCtrl.signal.aborted) return;
       if (!data.ok) throw new Error(data.msg || "加载失败");
+      if (!data.kline || !data.kline.length) throw new Error("K线数据为空（数据源全不可用）");
       stockData = data;
       // LRU缓存：更新访问顺序，超出上限删除最旧的
       const idx = klineCacheOrder.indexOf(code);

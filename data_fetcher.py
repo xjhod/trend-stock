@@ -198,7 +198,7 @@ def _kline_from_sina(code, period="daily", limit=300):
     params = {"symbol": sym, "scale": scale, "ma": "no", "datalen": str(limit)}
     for _ in range(2):
         try:
-            d = _get_json(url, params, retry=1, sleep=0.2, timeout=3)
+            d = _get_json(url, params, retry=1, sleep=0.2, timeout=8)
             if isinstance(d, list) and d:
                 rows = []
                 for it in d:
@@ -605,11 +605,21 @@ def get_kline(code, period="daily", limit=300, adjust="qfq"):
             elif src == "sina":
                 df = _kline_from_sina(code, period, limit)
             elif src == "tencent":
-                df = _kline_from_tencent(code, period, limit, adjust, retry=1, timeout=3)
+                df = _kline_from_tencent(code, period, limit, adjust, retry=2, timeout=8)
         except Exception:
             df = pd.DataFrame()
         if df is not None and not df.empty:
             break
+    # 第一轮全失败 → 补试腾讯/新浪（等足超时，覆盖网络抖动/慢源）
+    if df is None or df.empty:
+        for src in ("tencent", "sina"):
+            try:
+                df = (_kline_from_tencent(code, period, limit, adjust, retry=3, timeout=10)
+                      if src == "tencent" else _kline_from_sina(code, period, limit))
+            except Exception:
+                df = pd.DataFrame()
+            if df is not None and not df.empty:
+                break
     if df is None:
         df = pd.DataFrame()
     _cache_set(ck, df)
