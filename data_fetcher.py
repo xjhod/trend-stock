@@ -101,32 +101,33 @@ def get_realtime_quotes(codes):
         try:
             r = requests.get(f"https://qt.gtimg.cn/q={q}", headers=HEADERS, timeout=10)
             r.encoding = "gbk"
-            return r.text
+            return (batch, r.text)
         except Exception:
-            return ""
-    all_text = []
+            return (batch, "")
+    all_items = []  # [(batch, text), ...] 按请求批次顺序
+    pending = {}
     with ThreadPoolExecutor(max_workers=min(5, len(batches))) as ex:
-        futures = [ex.submit(_fetch_batch, b) for b in batches]
-        for f in as_completed(futures):
+        future_order = [ex.submit(_fetch_batch, b) for b in batches]
+        for f in future_order:
             try:
-                t = f.result()
+                batch, t = f.result()
                 if t:
-                    all_text.append(t)
+                    all_items.append((batch, t))
             except Exception:
                 continue
     result = []
-    for text in all_text:
-        for line in text.strip().split(";"):
-            line = line.strip()
-            if not line or "=" not in line:
-                continue
+    for batch, text in all_items:
+        lines = [l for l in text.strip().split(";") if l.strip() and "=" in l]
+        for idx, line in enumerate(lines):
             try:
                 val = line.split("=", 1)[1].strip().strip('"')
                 fields = val.split("~")
                 if len(fields) < 49:
                     continue
+                # 关键：腾讯fields[2]不带市场前缀，用请求batch里的原始code配对（保持顺序）
+                orig_code = batch[idx] if idx < len(batch) else fields[2]
                 result.append({
-                    "code": fields[2],
+                    "code": orig_code,
                     "name": fields[1],
                     "price": _f(fields[3]),
                     "pre_close": _f(fields[4]),

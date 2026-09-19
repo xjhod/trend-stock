@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.32"
+_BACKEND_VERSION = "1.9.33"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -28,7 +28,7 @@ import pool_manager
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
 HIGHFIT_FILE = os.path.join(BASE_DIR, "highfit_pool.json")
-DEFAULT_WATCHLIST = ["600519", "000001", "300750", "601318", "000858"]
+DEFAULT_WATCHLIST = ["600519", "sh000001", "300750", "601318", "000858"]
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 _lock = threading.Lock()
@@ -151,12 +151,18 @@ def api_watchlist():
             if c.startswith(p):
                 return c[2:]
         return c
-    qmap = {_norm(q["code"]): q for q in quotes}
+    # 关键修复：用完整带前缀code做key，避免 sh000001(上证指数) 与 sz000001(平安银行) 归一化后冲突
+    qmap = {}
+    for q in quotes:
+        qc = str(q.get("code","")).lower()
+        qmap[qc] = q                      # 带前缀完整code
+        qmap.setdefault(_norm(qc), q)     # 无前缀兜底（仅当无前缀key未被占用）
     ordered = []
     for c in codes:
-        nc = _norm(c)
-        if nc in qmap:
-            q = dict(qmap[nc])
+        nc = str(c).lower()
+        q = qmap.get(nc) or qmap.get(_norm(nc))
+        if q:
+            q = dict(q)
             q["code"] = c  # 保留原始code（带前缀的指数）
             ordered.append(q)
     return jsonify({"ok": True, "items": ordered})

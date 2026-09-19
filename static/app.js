@@ -57,7 +57,7 @@
       li.innerHTML =
         '<div class="wl-main">' +
           '<div class="wl-name">' + q.name + '</div>' +
-          '<div class="wl-code">' + q.code + '</div>' +
+          '<div class="wl-code">' + String(q.code).replace(/^(sh|sz|bj)/i, '') + '</div>' +
         '</div>' +
         '<div class="wl-price">' +
           '<div class="p ' + cls(q.pct_chg) + '">' + fmt(q.price) + '</div>' +
