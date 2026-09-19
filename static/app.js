@@ -169,6 +169,7 @@
     addInput.value = "";
     searchResult.classList.remove("open");
     if (data.ok) {
+      loadWatchlist();   // 刷新左侧自选股列表
     
 
 
