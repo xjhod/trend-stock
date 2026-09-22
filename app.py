@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.33"
+_BACKEND_VERSION = "1.9.34"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -310,11 +310,11 @@ def api_stock(code):
         f_fin = ex.submit(_fetch_fin)
         f_quote = ex.submit(_fetch_quote)
         # 每个请求加超时上限(8s)：防止某数据源挂起导致整个页面无限等待
-        daily = _safe_call(lambda: f_daily.result(timeout=8), pd.DataFrame())
-        weekly = _safe_call(lambda: f_weekly.result(timeout=8), pd.DataFrame())
-        monthly = _safe_call(lambda: f_monthly.result(timeout=8), pd.DataFrame())
-        ff = _safe_call(lambda: f_ff.result(timeout=8), pd.DataFrame())
-        fin = _safe_call(lambda: f_fin.result(timeout=8), pd.DataFrame())
+        daily = _safe_call(lambda: f_daily.result(timeout=20), pd.DataFrame())
+        weekly = _safe_call(lambda: f_weekly.result(timeout=15), pd.DataFrame())
+        monthly = _safe_call(lambda: f_monthly.result(timeout=15), pd.DataFrame())
+        ff = _safe_call(lambda: f_ff.result(timeout=10), pd.DataFrame())
+        fin = _safe_call(lambda: f_fin.result(timeout=10), pd.DataFrame())
         quotes = _safe_call(lambda: f_quote.result(timeout=8), [])
     quote = quotes[0] if quotes else {}
 

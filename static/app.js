@@ -19,7 +19,7 @@
   // fetch 带超时：避免数据源卡死导致页面无限转圈
   function fetchTimeout(url, opts, ms) {
     const ctrl = new AbortController();
-    const timer = setTimeout(function () { ctrl.abort(); }, ms || 12000);
+    const timer = setTimeout(function () { ctrl.abort(); }, ms || 25000);
     return fetch(url, Object.assign({}, opts, { signal: ctrl.signal }))
       .finally(function () { clearTimeout(timer); });
   }
@@ -232,7 +232,7 @@
         setTimeout(function () { selectStock(code, true); }, 800);
       } else {
         const timeout = e && e.name === "AbortError";
-        showStatus(timeout ? "加载超时（12秒）" : "加载失败：" + e.message);
+        showStatus(timeout ? "加载超时（25秒）" : "加载失败：" + e.message);
         document.getElementById("quote-bar").innerHTML =
           '<div class="flat" style="padding:10px;color:var(--up)">' +
           (timeout ? "加载超时：数据源响应过慢，请检查网络后重试" : "加载失败（网络或数据源抖动），请检查网络后点重试") +
