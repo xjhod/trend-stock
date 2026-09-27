@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.35"
+_BACKEND_VERSION = "1.9.36"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1448,11 +1448,76 @@ def api_industry_stocks(ind_name):
     return jsonify(result)
 
 
+# ---------- 数据自动同步（新浪长历史 → history.db） ----------
+_datasync_state = {"running": False, "last": "", "stale": False, "msg": ""}
+_datasync_lock = threading.Lock()
+
+
+def datasync_status():
+    try:
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bt_data", "history.db"))
+        last = conn.execute("SELECT MAX(date) FROM mkt_daily WHERE sym='sh000001'").fetchone()[0]
+        conn.close()
+        _datasync_state["last"] = last or ""
+    except Exception:
+        pass
+    return dict(_datasync_state)
+
+
+def _datasync_worker():
+    """后台同步：只更新数据, 不做任何选股判断。幂等, 加锁防并发。"""
+    if not _datasync_lock.acquire(blocking=False):
+        return
+    try:
+        _datasync_state.update(running=True, msg="正在同步行情数据…")
+        import fetch_sina_history as fsh
+
+        def cb(m):
+            _datasync_state["msg"] = m
+
+        fsh.sync_all(cb=cb)
+        import layers as _ly
+        _ly._load_ind_cache(force=True)  # 同步后强制重载行业缓存
+        _datasync_state.update(running=False, stale=False, msg="数据已是最新")
+    except Exception as e:
+        _datasync_state.update(running=False, msg=f"同步失败: {e}")
+    finally:
+        _datasync_lock.release()
+
+
+def _datasync_loop():
+    """启动延迟8s首次检查（新机器无库时尽快自动建库）, 之后每6小时检查一次（覆盖每日收盘后）。"""
+    time.sleep(8)
+    while True:
+        try:
+            import fetch_sina_history as fsh
+            if fsh.is_stale():
+                _datasync_state.update(stale=True, msg="数据过期, 自动同步中…")
+                _datasync_worker()
+        except Exception:
+            pass
+        time.sleep(6 * 3600)
+
+
+@app.route("/api/datasync/status")
+def api_datasync_status():
+    """数据同步状态（自动任务用）"""
+    return jsonify(datasync_status())
+
+
 if __name__ == "__main__":
     import os as _os
     import socket as _socket
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
     print(f"趋势全景 启动: http://{_HOST}:5000")
+    # 数据自动同步线程（守护, 每天收盘后自动更新新浪长历史数据）
+    try:
+        threading.Thread(target=_datasync_loop, daemon=True).start()
+        print("数据自动同步线程已启动（启动后45s检查, 之后每6小时）")
+    except Exception as e:
+        print("数据同步线程启动失败:", e)
+
     # 单实例保护（PID锁文件 + 端口检测双保险）：
     # 防止重复启动导致双实例叠加 CPU/内存占用。
     _LOCK_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".app.pid")

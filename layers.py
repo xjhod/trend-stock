@@ -10,6 +10,7 @@ import analysis as an
 BASE = os.path.dirname(os.path.abspath(__file__))
 ALL_A_FILE = os.path.join(BASE, "bt_data", "all_a.json")
 IND_CACHE_FILE = os.path.join(BASE, "bt_data", "ind_idx_cache.json")
+DB_FILE = os.path.join(BASE, "bt_data", "history.db")
 
 _market_cache = {"ts": 0, "rows": []}
 _ind_cache = None
@@ -46,16 +47,62 @@ def _clean_ind_series(rows, max_chg=0.25):
     return out
 
 
-def _load_ind_cache():
+def _load_ind_cache(force=False):
+    """行业指数缓存：优先 history.db 长历史合成指数（方案B, 池内等权, 约25年）；
+    无 db 时回退 ind_idx_cache.json（东财 BK, 约1.2年）。返回 {ind: [{date, close}]}"""
     global _ind_cache
-    if _ind_cache is None:
+    if _ind_cache is not None and not force:
+        return _ind_cache
+    d = {}
+    try:
+        import sqlite3
+        conn = sqlite3.connect(DB_FILE)
+        rows = conn.execute("SELECT ind, date, close FROM ind_daily").fetchall()
+        conn.close()
+        for ind, date, close in rows:
+            d.setdefault(ind, []).append({"date": date, "close": float(close)})
+    except Exception:
+        d = {}
+    if not d:
         try:
             raw = json.load(open(IND_CACHE_FILE, encoding="utf-8"))
         except Exception:
             raw = {}
-        # 读取即清洗异常跳变（历史坏缓存自动修复）
-        _ind_cache = {k: _clean_ind_series(v) for k, v in raw.items()}
+        d = {k: _clean_ind_series(v) for k, v in raw.items()}
+    _ind_cache = d
     return _ind_cache
+
+
+def get_market_history_long():
+    """上证指数长历史（新浪 2001 起, 不复权, 带volume），回测/五态用。失败回退实时400根"""
+    try:
+        import sqlite3
+        conn = sqlite3.connect(DB_FILE)
+        rows = conn.execute("SELECT date, open, high, low, close, volume FROM mkt_daily WHERE sym='sh000001' ORDER BY date").fetchall()
+        conn.close()
+        if len(rows) >= 300:
+            return [{"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]} for r in rows]
+    except Exception:
+        pass
+    return get_market_kline(400)
+
+
+def get_stock_history(code, limit=6011):
+    """单只股票长历史（新浪不复权, 约25年, 带volume），回测用。失败返回 None"""
+    try:
+        import sqlite3
+        conn = sqlite3.connect(DB_FILE)
+        rows = conn.execute(
+            "SELECT date, open, high, low, close, volume FROM stock_daily WHERE code=? ORDER BY date DESC LIMIT ?",
+            (str(code), limit)).fetchall()
+        conn.close()
+        if not rows:
+            return None
+        out = [{"date": r[0], "open": r[1], "high": r[2], "low": r[3], "close": r[4], "volume": r[5]} for r in rows]
+        out.reverse()
+        return out
+    except Exception:
+        return None
 
 
 def get_market_kline(limit=400):

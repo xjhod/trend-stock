@@ -2290,6 +2290,24 @@
   async function loadIndustryTrend() {
     const infoEl = document.getElementById("ind-info");
     const listEl = document.getElementById("ind-list");
+    // 数据同步状态（自动任务, 显示数据截至日期）
+    try {
+      fetch("/api/datasync/status").then(r => r.json()).then(function (ds) {
+        const el = document.getElementById("ind-data-date");
+        if (!el) return;
+        if (ds.running) {
+          el.textContent = "⏳ " + (ds.msg || "数据同步中…");
+          el.style.color = "var(--warn)";
+          setTimeout(function () { if (document.getElementById("ind-data-date")) loadIndustryTrend(); }, 20000);
+        } else if (ds.stale) {
+          el.textContent = "数据过期, 自动同步中…";
+          el.style.color = "var(--warn)";
+        } else if (ds.last) {
+          el.textContent = "数据截至 " + ds.last;
+          el.style.color = "var(--text-dim)";
+        }
+      }).catch(function () {});
+    } catch (e) {}
     const stocksEl = document.getElementById("ind-stocks");
     if (infoEl) infoEl.textContent = "行业趋势加载中…";
     if (stocksEl) stocksEl.style.display = "none";
