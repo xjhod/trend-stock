@@ -1802,7 +1802,10 @@
           '<div class="scan-item-head"><span class="scan-type ' + (it.is_lead ? "trd" : "reb") + '">' + (it.is_lead ? "领先" : "超跌") + '</span>' +
           '<span class="scan-name">' + it.name + ' <em>' + it.code + '</em></span>' + star + '</div>' +
           '<div class="scan-item-sub">' + indSt + " · " + it.stk_state + '</div>' +
-          '<div class="scan-tags"><span>60日参考 ' + (ref.win || "-") + '% / ' + (ref.avg || "-") + '</span></div>' +
+          '<div class="scan-tags">' +
+            (it.ret_excess != null ? '<span title="行业内中性化：个股60日涨幅相对行业指数" style="color:' + (it.ret_excess >= 0 ? "var(--up)" : "var(--down)") + '">行业超额 ' + (it.ret_excess >= 0 ? "+" : "") + it.ret_excess + '%</span>' : "") +
+            '<span>60日参考 ' + (ref.win || "-") + '% / ' + (ref.avg || "-") + '</span>' +
+          '</div>' +
           '</div>';
       }
       let html = "";
@@ -2228,7 +2231,7 @@
   window.__srcSave = srcSave;
 
   // ---------- 顶部市场模式切换（常驻可见，一键牛熊） ----------
-  function renderRegime(reg) {
+  function renderRegime(reg, snap) {
     const el = document.getElementById("ms-regime");
     if (!el) return;
     if (!reg || !reg.state) { el.style.display = "none"; return; }
@@ -2236,11 +2239,18 @@
     const attack = ["健康牛", "深熊底"].indexOf(reg.state) >= 0;
     const avoid = ["熊市反弹", "牛深回调"].indexOf(reg.state) >= 0;
     const lowkey = document.body.classList.contains("lowkey");
+    // 每日快照：年线掉头倒计时 + 量能分位（纯描述，零预测）
+    const turnTxt = (snap && snap.ma250_turn != null) ? ("年线掉头倒计时 " + snap.ma250_turn + " 日（假设价格横盘不动，纯算术零预测）") : "";
+    const volTxt = (snap && snap.vol_pct != null) ? ("量能分位 " + Math.round(snap.vol_pct * 100) + "%（近250日排名）") : "";
+    const turnShort = (snap && snap.ma250_turn != null) ? ("倒计时" + snap.ma250_turn + "日") : "";
+    const volShort = (snap && snap.vol_pct != null) ? ("量能" + (Math.round(snap.vol_pct * 1000) / 10) + "%") : "";
     el.textContent = lowkey
       ? ("市况·" + reg.state)
-      : ("环境·" + reg.state + "  +60日" + reg.up60 + "%");
+      : ("环境·" + reg.state + "  +60日" + reg.up60 + "%" +
+         ((snap && (turnShort || volShort)) ? " · " + [turnShort, volShort].filter(Boolean).join(" · ") : ""));
     el.className = "regime-badge " + (attack ? "hi" : (avoid ? "lo" : "mid"));
-    el.title = reg.desc + "\n16年回测: 该状态后60日上涨率" + reg.up60 + "%, 平均收益" + reg.avg60;
+    el.title = [reg.desc + "\n16年回测: 该状态后60日上涨率" + reg.up60 + "%, 平均收益" + reg.avg60,
+                turnTxt, volTxt].filter(Boolean).join("\n");
     el.style.display = "inline-block";
   }
   function loadModeSwitch() {
@@ -2249,7 +2259,7 @@
     if (!sel) return;
     fetch("/api/env").then(r => r.json()).then(function (ev) {
       const lowkey = document.body.classList.contains("lowkey");
-      if (ev && ev.det && ev.det.regime) renderRegime(ev.det.regime);
+      if (ev && ev.det && ev.det.regime) renderRegime(ev.det.regime, ev.det);
       if (ev && ev.score !== undefined && ev.score !== null) {
         if (sc) {
           sc.textContent = lowkey ? "--" : (ev.score + "/6");
@@ -2319,6 +2329,7 @@
           '<div class="ind-meta">' +
             '<span style="color:' + dirColor + ';font-size:11px">' + dirText + '</span>' +
             '<span class="ind-ret" style="color:' + (it.ret20 >= 0 ? 'var(--up)' : 'var(--down)') + '">20日 ' + (it.ret20 >= 0 ? '+' : '') + it.ret20 + '%</span>' +
+            (it.rho != null ? '<span class="ind-rho" title="相对上证日收益相关性 ρ（120日）· 涨/跌日弹性 β；ρ低≠抗跌，看跌日β">ρ' + it.rho + ' · 涨' + (it.up_beta == null ? "-" : it.up_beta) + '/跌' + (it.dn_beta == null ? "-" : it.dn_beta) + '</span>' : '') +
             indepMeta +
             '<span class="ind-count">' + it.stock_count + ' 只</span>' +
           '</div>';

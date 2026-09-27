@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.34"
+_BACKEND_VERSION = "1.9.35"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1206,6 +1206,53 @@ def api_diagnose(code):
 
 
 # ---------------- 行业轮动（行业趋势看板） ----------------
+def _ind_rho_beta(ind_rows, mkt_rows, win=120):
+    """行业 vs 大盘 日收益相关性 ρ 与涨跌不对称 β（120日窗口, 描述当下）。
+    rho: 行业日收益与大盘日收益的相关系数
+    up_beta/down_beta: 大盘上涨日/下跌日 各自回归斜率（行业收益~大盘收益）
+    返回 (rho, up_beta, down_beta, n) ；数据不足返回 (None,None,None,0)
+    """
+    try:
+        def _ret(rows):
+            m = {}
+            prev = None
+            for r in rows:
+                d = str(r.get("date", "")).replace("-", "")[:8]
+                c = float(r["close"])
+                if prev is not None and prev[0] != d and prev[1]:
+                    m[d] = c / prev[1] - 1
+                prev = (d, c)
+            return m
+        ir = _ret(ind_rows[-win*2:])
+        mr = _ret(mkt_rows[-win*2:])
+        ks = sorted(k for k in ir if k in mr)
+        if len(ks) < 60:
+            return None, None, None, len(ks)
+        ks = ks[-win:]
+        xs = [mr[k] for k in ks]
+        ys = [ir[k] for k in ks]
+        import statistics
+        mx, my = sum(xs)/len(xs), sum(ys)/len(ys)
+        cov = sum((x-mx)*(y-my) for x, y in zip(xs, ys))
+        vx = sum((x-mx)**2 for x in xs)
+        rho = cov / (vx**0.5 * sum((y-my)**2 for y in ys)**0.5) if vx and sum((y-my)**2 for y in ys) else 0
+        def _beta(pairs):
+            if len(pairs) < 15:
+                return None
+            a = [p[0] for p in pairs]; b = [p[1] for p in pairs]
+            ma, mb = sum(a)/len(a), sum(b)/len(b)
+            v = sum((x-ma)**2 for x in a)
+            if v == 0:
+                return None
+            return sum((x-ma)*(y-mb) for x, y in pairs) / v
+        up = _beta([(x, y) for x, y in zip(xs, ys) if x > 0])
+        dn = _beta([(x, y) for x, y in zip(xs, ys) if x <= 0])
+        return (round(rho, 2), round(up, 2) if up is not None else None,
+                round(dn, 2) if dn is not None else None, len(ks))
+    except Exception:
+        return None, None, None, 0
+
+
 def _calc_ind_trend(rows):
     """计算行业趋势状态和强度（B标准：收盘>MA20 + MA20上行 + MA5>MA10）"""
     if not rows or len(rows) < 25:
@@ -1260,11 +1307,13 @@ def api_industry_trend():
         direction, strength, score, ma20_slope, ret20 = _calc_ind_trend(rows)
         count = sum(1 for s in pool if s.get("ind") == ind_name)
         indep, excess, _mm, streak = _ind_independent(rows, mkt_rows)
+        rho, up_beta, dn_beta, rho_n = _ind_rho_beta(rows, mkt_rows)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
             "stock_count": count, "latest_close": round(rows[-1]["close"], 2),
             "independent": indep, "excess": excess, "streak": streak,
+            "rho": rho, "up_beta": up_beta, "dn_beta": dn_beta, "rho_n": rho_n,
         })
     # 排序：独立行情置顶（按跑赢幅度降序），up 排前（按score降序），sideways 中间，down 排后
     dir_rank = {"up": 0, "sideways": 1, "down": 2}

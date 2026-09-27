@@ -26,6 +26,37 @@ DEFAULT_MIN_POS = 30    # 进取模式最低仓位%
 # ---------------------------------------------------------------
 # 环境评分
 # ---------------------------------------------------------------
+def ma250_turn_days(closes):
+    """年线掉头倒计时：假设价格从今天起横盘不动，MA250 多久后转为下行（交易日数）。
+    第k天移除窗口最老的第k根K线，年线掉头当 今天收盘 < 该K线收盘。
+    返回最小 k(1~250)；250 天内不掉头返回 None。零预测成分的纯算术。"""
+    n = len(closes)
+    if n < 251:
+        return None
+    c = closes[-1]
+    for i in range(250):
+        if c < closes[n - 250 + i]:
+            return i + 1
+    return None
+
+
+def _vol_pctile():
+    """上证日成交量 250 日分位（当前量在近250日量中的百分位 0~1），失败返回 None。
+    腾讯上证日线 volume 字段（指数成交量，口径一致即可用于分位）。"""
+    try:
+        import data_fetcher as df
+        k = df.get_kline("sh000001", "daily", 300, "")
+        if k is None or len(k) < 251 or "volume" not in k.columns:
+            return None
+        vols = [float(x) for x in k["volume"].tolist()[-250:]]
+        cur = vols[-1]
+        # 排名分位（含自身）：最小=1/250≈0.4%，避免"当前恰好最小"时出现 0.0 的突兀读数
+        rank = sorted(vols).index(cur) + 1
+        return round(rank / len(vols), 3)
+    except Exception:
+        return None
+
+
 def env_score(asof=None):
     """返回 (score 0-6, det 明细dict) ; 数据不足返回 (None, None)
     asof: 历史回测用(截至该日数据); 默认用最新数据
@@ -74,10 +105,14 @@ def env_score(asof=None):
         regime = layers.env_regime(closes)
     except Exception:
         regime = None
+    # 年线掉头倒计时 + 量能分位（每日快照，纯描述零预测）
+    ma250_turn = ma250_turn_days(closes) if asof is None else None
+    vol_pct = _vol_pctile() if asof is None else None
     det = {"trend": d, "s_trend": s_trend, "dd250": round(dd250, 1), "s_pos": s_pos,
            "b_up": round(b_up, 0), "b_new": round(b_new, 1), "s_breadth": s_breadth,
            "mom20": round(mom20, 1), "s_mom": s_mom, "score": score,
-           "regime": regime, "asof": (asof or "latest")}
+           "regime": regime, "asof": (asof or "latest"),
+           "ma250_turn": ma250_turn, "vol_pct": vol_pct}
     return score, det
 
 

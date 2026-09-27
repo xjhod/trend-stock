@@ -50,6 +50,15 @@ def _ind_regime(ind):
     return r["key"] if r else None
 
 
+def _ind_ret60(ind):
+    """行业指数近60日涨幅（行业内中性化基准）"""
+    rows = layers._load_ind_cache().get(ind)
+    if not rows or len(rows) < 61:
+        return None
+    closes = [r["close"] for r in rows]
+    return (closes[-1] / closes[-61] - 1) * 100
+
+
 def _one(item):
     code = item["code"]
     try:
@@ -65,6 +74,10 @@ def _one(item):
             return None  # 只保留超跌与领先两组
         ind = item.get("ind", "")
         ind_key = _ind_regime(ind)
+        # 行业内中性化：个股60日涨幅 - 行业指数60日涨幅（>0=跑赢行业, <0=弱于行业）
+        ret60 = (closes[-1] / closes[-61] - 1) * 100 if len(closes) >= 61 else None
+        ind_ret60 = _ind_ret60(ind)
+        ret_excess = round(ret60 - ind_ret60, 2) if (ret60 is not None and ind_ret60 is not None) else None
         return {
             "code": code,
             "name": item.get("name", ""),
@@ -72,6 +85,9 @@ def _one(item):
             "stk_key": key,
             "stk_state": st["state"],
             "days_above60": st["days_above60"],
+            "ret60": round(ret60, 2) if ret60 is not None else None,
+            "ind_ret60": round(ind_ret60, 2) if ind_ret60 is not None else None,
+            "ret_excess": ret_excess,
             "ind_key": ind_key,
             "ind_healthy": ind_key == "bull_strong",
             "is_lead": key == "bull_strong",
@@ -132,9 +148,13 @@ def run_scan(limit=None, workers=6):
             _last.update(running=False, ok=True, msg="完成")
     over = [r for r in results if not r["is_lead"]]
     lead = [r for r in results if r["is_lead"]]
-    # 排序：行业健康牛优先；超跌组按站上年线天数少(跌得深)优先，领先组按天数多(趋势强)优先
-    over.sort(key=lambda r: (0 if r["ind_healthy"] else 1, r["days_above60"]))
-    lead.sort(key=lambda r: (0 if r["ind_healthy"] else 1, -r["days_above60"]))
+    # 排序：行业健康牛优先；行业内中性化（个股相对行业60日超额）：
+    # 超跌组 ret_excess 越负（比行业跌得更深，个股自身超跌 alpha）优先；
+    # 领先组 ret_excess 越正（比行业强，个股自身强势 alpha）优先。
+    over.sort(key=lambda r: (0 if r["ind_healthy"] else 1,
+                              r["ret_excess"] if r["ret_excess"] is not None else 999))
+    lead.sort(key=lambda r: (0 if r["ind_healthy"] else 1,
+                              -(r["ret_excess"] if r["ret_excess"] is not None else -999)))
     for r in over:
         ref = REF["over"]["ind"] if r["ind_healthy"] else REF["over"]["no_ind"]
         r["ref"] = ref

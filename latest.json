@@ -1,6 +1,1 @@
-{
- "version": "1.9.34",
- "note": "v1.9.34：K线加载超时修复——后端各数据任务超时8秒放宽到20秒（K线多源轮询在慢网络下需要更长时间），前端等待从12秒放宽到25秒，慢网络下K线不再误报加载失败",
- "download": "https://github.com/xjhod/trend-stock/archive/refs/heads/main.zip",
- "updated_at": "2026-09-22 10:00:00"
-}
+1.9.35
