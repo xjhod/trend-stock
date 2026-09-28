@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.39"
+_BACKEND_VERSION = "1.9.40"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1486,9 +1486,26 @@ def _datasync_worker():
         _datasync_lock.release()
 
 
-def _repair_ind_if_tiny(min_inds=20):
-    """行业指数数量异常少(<min_inds)时, 用当前高配池强制重建行业指数。
-    修复场景：本地 highfit_pool.json 是旧小池/曾被"重建池"缩小的池, 行业只剩个位数。"""
+def _repair_ind_if_tiny(min_inds=20, min_pool=800):
+    """池子/行业指数异常时自动修复（用户无需手动操作）：
+    1) highfit_pool.json 股票数 < min_pool -> 从内置备份 highfit_pool_backup.json 恢复大池
+    2) ind_daily 行业数 < min_inds -> 用当前池子重建行业指数
+    """
+    import shutil as _sh
+    # 1) 池子异常小 -> 恢复内置备份大池
+    try:
+        pool_path = os.path.join(BASE_DIR, "highfit_pool.json")
+        backup_path = os.path.join(BASE_DIR, "highfit_pool_backup.json")
+        if os.path.exists(pool_path) and os.path.exists(backup_path):
+            with open(pool_path, encoding="utf-8") as f:
+                _cur = json.load(f)
+            cur_n = len(_cur) if isinstance(_cur, list) else 0
+            if cur_n < min_pool:
+                print(f"[自动修复] 当前池仅 {cur_n} 只(<{min_pool}), 恢复内置大池备份…", flush=True)
+                _sh.copyfile(backup_path, pool_path)
+    except Exception as e:
+        print(f"[自动修复] 池恢复失败(忽略): {e}", flush=True)
+    # 2) 行业指数异常少 -> 重建
     try:
         import fetch_sina_history as fsh
         import sqlite3 as _sq
