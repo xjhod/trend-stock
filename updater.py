@@ -92,6 +92,35 @@ def _bust(url):
     return f"{url}{sep}t={int(_t.time() * 1000)}"
 
 
+def _zip_version_from_url(url, timeout=30):
+    """从 zip 直链下载（内存中）并读取包内 VERSION，返回 (版本号, zip内容)。
+    直链（如 aka.doubaocdn.com）下载快且无需 GitHub 域名，作为首选更新源。"""
+    import requests
+    try:
+        r = requests.get(url, timeout=timeout)
+        r.raise_for_status()
+    except Exception as e:
+        raise RuntimeError(f"直链下载失败: {e}")
+    data = r.content
+    if not data:
+        raise RuntimeError("直链下载内容为空")
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        raise RuntimeError("直链内容不是有效zip")
+    bad = zf.testzip()
+    if bad:
+        raise RuntimeError(f"直链更新包损坏: {bad}")
+    names = zf.namelist()
+    root = _zip_root(names)
+    for name in names:
+        if os.path.basename(name) == "VERSION":
+            with zf.open(name) as f:
+                ver = f.read().decode("utf-8", "ignore").strip()
+            return ver, data
+    raise RuntimeError("直链更新包内无VERSION")
+
+
 def _should_update(rel):
     """是否是可更新的代码文件（数据文件一律保留）"""
     rel = rel.replace("\\", "/")
@@ -120,12 +149,23 @@ def _zip_root(names):
 
 
 def check_update():
-    """多源回退：逐个尝试各更新源，返回版本对比结果"""
+    """多源回退：首选直链(aka, 无需GitHub域名) -> 逐个尝试GitHub各更新源"""
     import requests
     cfg = load_config()
+    cur0 = current_version()
+    direct = str(cfg.get("direct_url", "") or "").strip()
+    if direct:
+        try:
+            ver, _ = _zip_version_from_url(direct, timeout=25)
+            has_up = bool(ver) and _ver_tuple(ver) > _ver_tuple(cur0)
+            return {"ok": True, "has_update": has_up, "current": cur0, "latest": ver,
+                    "note": "直连更新源(aka)", "download": direct, "source": "直连(aka)"}
+        except Exception as e:
+            last_err = f"直连源失败：{e}"
+    else:
+        last_err = None
     raw_latest = _raw_url(cfg, "latest")
     raw_zip = _raw_url(cfg, "zip")
-    last_err = None
     tried = []
     for s in cfg["sources"]:
         prefix = str(s.get("prefix", ""))
@@ -182,8 +222,11 @@ def apply_update(download_url):
     import requests
     cfg = load_config()
     raw_zip = _raw_url(cfg, "zip")
-    # 候选下载地址：优先国内加速源（下载快、更稳定），GitHub 直连放最后兜底
+    # 候选下载地址：直链(aka) -> 国内加速源 -> GitHub 直连兜底
     candidates = []
+    direct = str(cfg.get("direct_url", "") or "").strip()
+    if direct:
+        candidates.append(direct)
     for s in cfg["sources"]:
         if s["prefix"]:
             candidates.append(s["prefix"] + raw_zip)
