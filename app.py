@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.38"
+_BACKEND_VERSION = "1.9.39"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1486,6 +1486,30 @@ def _datasync_worker():
         _datasync_lock.release()
 
 
+def _repair_ind_if_tiny(min_inds=20):
+    """行业指数数量异常少(<min_inds)时, 用当前高配池强制重建行业指数。
+    修复场景：本地 highfit_pool.json 是旧小池/曾被"重建池"缩小的池, 行业只剩个位数。"""
+    try:
+        import fetch_sina_history as fsh
+        import sqlite3 as _sq
+        conn = _sq.connect(fsh.DB)
+        try:
+            n = conn.execute("SELECT COUNT(DISTINCT ind) FROM ind_daily").fetchone()[0]
+        finally:
+            conn.close()
+        if n < min_inds:
+            print(f"[自动修复] 行业指数仅 {n} 个(<{min_inds}), 用当前池子自动重建行业指数…", flush=True)
+            _datasync_state.update(msg="行业数据异常, 自动重建中…")
+            fsh.sync_inds()
+            import layers as _ly
+            _ly._load_ind_cache(force=True)
+            _datasync_state.update(msg="行业指数已重建")
+            return True
+    except Exception as e:
+        print(f"[自动修复] 行业检查失败(忽略): {e}", flush=True)
+    return False
+
+
 def _datasync_loop():
     """启动延迟8s首次检查（新机器无库时尽快自动建库）, 之后每6小时检查一次（覆盖每日收盘后）。"""
     time.sleep(8)
@@ -1495,6 +1519,9 @@ def _datasync_loop():
             if fsh.is_stale():
                 _datasync_state.update(stale=True, msg="数据过期, 自动同步中…")
                 _datasync_worker()
+            else:
+                # 数据不过期时, 也检查行业指数是否异常缺失(旧小池修复)
+                _repair_ind_if_tiny()
         except Exception:
             pass
         time.sleep(6 * 3600)
