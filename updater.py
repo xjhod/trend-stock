@@ -63,7 +63,8 @@ def load_config():
             parsed.append({"name": str(s.get("name", "源")), "prefix": str(s.get("prefix", "")).strip()})
         else:
             parsed.append({"name": "源", "prefix": str(s).strip()})
-    return {"owner": owner, "repo": repo, "branch": branch, "sources": parsed}
+    direct_url = str(cfg.get("direct_url", "") or "").strip()
+    return {"owner": owner, "repo": repo, "branch": branch, "sources": parsed, "direct_url": direct_url}
 
 
 def save_config(cfg):
