@@ -2320,7 +2320,23 @@
       const upN = data.total_up || 0;
       const totalN = data.total_ind || 0;
       const indepN = data.total_indep || 0;
-      if (infoEl) infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个" + (indepN ? " · 独立行情 " + indepN + " 个" : "") + "（市值≥30亿）";
+      if (infoEl) {
+        if (totalN === 0) {
+          // 行业数据未就绪：区分"同步中"与"失败"
+          infoEl.textContent = "行业数据未就绪";
+          try {
+            fetch("/api/datasync/status").then(r => r.json()).then(function (ds) {
+              if (!infoEl) return;
+              if (ds.running) infoEl.textContent = "⏳ " + (ds.msg || "行业数据同步中，约需2-3分钟，完成后自动刷新…");
+              else if (ds.stale) infoEl.textContent = "数据过期，自动同步中（约2-3分钟）…";
+              else if (!ds.last) infoEl.textContent = "行业数据未就绪：请确认网络正常，程序启动后会自动建库（约2-3分钟）";
+              else infoEl.textContent = "全部 0 个行业（数据截至 " + ds.last + "，同步异常请查看日志）";
+            }).catch(function () { infoEl.textContent = "行业数据未就绪（网络或数据源异常）"; });
+          } catch (e) { infoEl.textContent = "行业数据未就绪"; }
+        } else {
+          infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个" + (indepN ? " · 独立行情 " + indepN + " 个" : "") + "（市值≥30亿）";
+        }
+      }
       listEl.innerHTML = "";
       (data.items || []).forEach(function (it, idx) {
         const div = document.createElement("div");
@@ -2473,7 +2489,25 @@
   }).catch(function () {});
 
     const indRefresh = document.getElementById("ind-refresh");
-    if (indRefresh) indRefresh.addEventListener("click", function () { loadIndustryTrend(); });
+    if (indRefresh) indRefresh.addEventListener("click", function () {
+      if (indRefresh.disabled) return;
+      indRefresh.disabled = true;
+      const oldT = indRefresh.textContent;
+      indRefresh.textContent = "刷新中…";
+      const infoEl2 = document.getElementById("ind-info");
+      const t0 = Date.now();
+      Promise.resolve(loadIndustryTrend()).finally(function () {
+        indRefresh.disabled = false;
+        indRefresh.textContent = oldT;
+        // 至少显示0.6s, 让用户看到反馈
+        const wait = Math.max(0, 600 - (Date.now() - t0));
+        setTimeout(function () {
+          if (infoEl2 && infoEl2.textContent.indexOf("加载中") < 0 && infoEl2.textContent.indexOf("未就绪") < 0) {
+            infoEl2.textContent = "已刷新 · " + infoEl2.textContent;
+          }
+        }, wait);
+      });
+    });
     const indBack = document.getElementById("ind-back");
     if (indBack) indBack.addEventListener("click", function () {
       currentInd = null;
