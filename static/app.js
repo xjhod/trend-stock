@@ -1973,6 +1973,8 @@
       if (mp) mp.value = (m.min_pos !== undefined ? m.min_pos : 30);
       const pt = document.getElementById("cfg-pool-threshold");
       if (pt) pt.value = (m.pool_threshold !== undefined ? m.pool_threshold : 100);
+      const bf = document.getElementById("cfg-basic-filter");
+      if (bf) bf.checked = !!m.basic_filter;
       // 显示当前环境评分
       fetch("/api/env").then(r => r.json()).then(function (ev) {
         const badge = document.getElementById("cfg-env-score");
@@ -2042,6 +2044,17 @@
       .then(r => r.json()).then(function () { alert("设置已保存"); })
       .catch(function () { alert("保存失败"); });
   }
+  // 基本面过滤开关: 勾选即保存并即时刷新板块分析(本地过滤, 秒级生效)
+  document.addEventListener("change", function (e) {
+    if (e.target && e.target.id === "cfg-basic-filter") {
+      fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ market: { basic_filter: e.target.checked } }) })
+        .then(r => r.json()).then(function () {
+          if (e.target.checked) alert("基本面过滤已开启：板块分析将只显示 营收/净利增速>0 的股票（本地过滤，即时生效）");
+          setTimeout(function () { loadIndustryTrend(); }, 300);
+        }).catch(function () { alert("保存失败"); });
+    }
+  });
   // 重建高适配池（动态更新）
   document.getElementById("cfg-pool-build").addEventListener("click", function () {
     const thr = parseInt(document.getElementById("cfg-pool-threshold").value, 10) || 100;

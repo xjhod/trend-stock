@@ -28,6 +28,36 @@ import pool_manager
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
 HIGHFIT_FILE = os.path.join(BASE_DIR, "highfit_pool.json")
+
+def _load_pool_raw():
+    try:
+        with open(HIGHFIT_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _effective_pool():
+    """高适配池（按设置页"基本面过滤"开关过滤）。
+    开关开: 只保留 净利增速>0 且 (营收增速缺失或>0) 的股票——
+    银行等金融行业新浪不披露营收增速(rev_g=None), 只要净利正增长即保留。
+    开关关: 返回完整池。过滤是本地秒级操作, 不触发任何网络拉取。"""
+    pool = _load_pool_raw()
+    try:
+        basic = notify.load_config().get("market", {}).get("basic_filter", False)
+    except Exception:
+        basic = False
+    if not basic:
+        return pool
+    out = []
+    for s in pool:
+        npg = s.get("np_g")
+        if npg is None or npg <= 0:
+            continue
+        rvg = s.get("rev_g")
+        if rvg is not None and rvg <= 0:
+            continue
+        out.append(s)
+    return out
 DEFAULT_WATCHLIST = ["600519", "sh000001", "300750", "601318", "000858"]
 
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -515,7 +545,7 @@ def api_config_set():
         cfg["sms"].update(data["sms"])
     if "market" in data:
         m = cfg["market"]
-        for k in ("mode", "threshold", "min_pos", "pool_threshold"):
+        for k in ("mode", "threshold", "min_pos", "pool_threshold", "basic_filter"):
             if k in data["market"]:
                 m[k] = data["market"][k]
         cfg["market"] = m
@@ -1291,11 +1321,7 @@ def _calc_ind_trend(rows):
 def api_industry_trend():
     """行业趋势看板：趋势向上行业 + 独立行情标记（置顶）"""
     ind_cache = layers._load_ind_cache()
-    try:
-        with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
-            pool = json.load(f)
-    except Exception:
-        pool = []
+    pool = _effective_pool()
     mkt_rows = _safe_call(layers.get_market_kline, [])
     mkt_mom20 = None
     if len(mkt_rows) >= 21:
@@ -1335,11 +1361,9 @@ def api_industry_stocks(ind_name):
     _c = INDUSTRY_STOCKS_CACHE.get(ind_name)
     if _c and time.time() - _c[0] < 600:
         return jsonify(_c[1])
-    try:
-        with open(os.path.join(BASE_DIR, "highfit_pool.json"), encoding="utf-8") as f:
-            pool = json.load(f)
-    except Exception:
-        return jsonify({"ok": False, "msg": "高适配池加载失败"}), 500
+    pool = _effective_pool()
+    if not pool:
+        return jsonify({"ok": False, "msg": "高适配池为空（基本面过滤后无匹配股票，可在设置中关闭过滤）"}), 500
     ind_stocks = [s for s in pool if s.get("ind") == ind_name]
     if not ind_stocks:
         return jsonify({"ok": True, "industry": ind_name, "items": []})
