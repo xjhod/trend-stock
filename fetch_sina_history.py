@@ -50,6 +50,9 @@ def init_db(conn):
         ind TEXT, date TEXT, close REAL, n REAL, PRIMARY KEY(ind, date))""")
     conn.execute("""CREATE TABLE IF NOT EXISTS meta(
         k TEXT PRIMARY KEY, v TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS mkt_daily(
+        sym TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+        PRIMARY KEY(sym, date))""")
     conn.commit()
 
 

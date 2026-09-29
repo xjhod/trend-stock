@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.42"
+_BACKEND_VERSION = "1.9.43"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1512,14 +1512,21 @@ def _repair_ind_if_tiny(min_inds=20, min_pool=800):
         conn = _sq.connect(fsh.DB)
         try:
             n = conn.execute("SELECT COUNT(DISTINCT ind) FROM ind_daily").fetchone()[0]
+        except Exception as e:
+            # 旧库没有 ind_daily 表: 建表后按0行业处理, 触发完整同步
+            print(f"[自动修复] 数据库缺少行业表({e}), 初始化表结构后按0行业处理…", flush=True)
+            try:
+                fsh.init_db(conn)
+            except Exception as e2:
+                print(f"[自动修复] 建表失败(忽略): {e2}", flush=True)
+            n = 0
         finally:
             conn.close()
         if n < min_inds:
-            print(f"[自动修复] 行业指数仅 {n} 个(<{min_inds}), 先补齐大池股票日线数据, 再重建行业指数…", flush=True)
-            _datasync_state.update(msg="行业数据异常, 正在补齐股票数据并重建行业…")
-            # 关键: 先补齐大池(1104/1626只)的日线, 否则行业合成只覆盖旧小池的股票
-            fsh.sync_stocks(limit=0, workers=8)
-            fsh.sync_inds()
+            print(f"[自动修复] 行业指数仅 {n} 个(<{min_inds}), 执行完整同步(建表+补股票数据+指数+行业合成)…", flush=True)
+            _datasync_state.update(msg="行业数据异常, 正在完整同步并重建行业…")
+            # 一条龙: init_db建全表(含mkt_daily) -> 补齐大池股票日线 -> 指数 -> 行业合成
+            fsh.sync_all(limit=0, workers=8)
             import layers as _ly
             _ly._load_ind_cache(force=True)
             _datasync_state.update(msg="行业指数已重建")
