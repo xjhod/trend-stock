@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.44"
+_BACKEND_VERSION = "1.9.45"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1365,8 +1365,10 @@ def api_industry_stocks(ind_name):
             except Exception:
                 continue
         if _series:
+            # 小行业(成分<5只)时, 按实际成分数放宽"至少有几天可计入"的阈值, 避免行业指数被全部过滤成直线
+            _min_n = min(5, max(1, len(_ind_top)))
             _rows = sorted([{"date": d, "close": sum(v) / len(v)}
-                            for d, v in _series.items() if len(v) >= 5], key=lambda x: x["date"])
+                            for d, v in _series.items() if len(v) >= _min_n], key=lambda x: x["date"])
             ind_spark_cache = {r["date"]: r["close"] for r in _rows[-40:]}
     except Exception:
         pass
