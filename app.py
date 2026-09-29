@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.40"
+_BACKEND_VERSION = "1.9.41"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1515,8 +1515,10 @@ def _repair_ind_if_tiny(min_inds=20, min_pool=800):
         finally:
             conn.close()
         if n < min_inds:
-            print(f"[自动修复] 行业指数仅 {n} 个(<{min_inds}), 用当前池子自动重建行业指数…", flush=True)
-            _datasync_state.update(msg="行业数据异常, 自动重建中…")
+            print(f"[自动修复] 行业指数仅 {n} 个(<{min_inds}), 先补齐大池股票日线数据, 再重建行业指数…", flush=True)
+            _datasync_state.update(msg="行业数据异常, 正在补齐股票数据并重建行业…")
+            # 关键: 先补齐大池(1104/1626只)的日线, 否则行业合成只覆盖旧小池的股票
+            fsh.sync_stocks(limit=0, workers=8)
             fsh.sync_inds()
             import layers as _ly
             _ly._load_ind_cache(force=True)
