@@ -20,10 +20,16 @@ def main():
     out = []
     pn = 1
     total = None
+    fail_cnt = 0
     while True:
         d = fetch_page(pn)
         if d is None:
-            print("页请求失败:", pn); time.sleep(2); continue
+            fail_cnt += 1
+            print("页请求失败:", pn)
+            if fail_cnt >= 5:
+                raise RuntimeError("东财数据源不可用（可能被网络屏蔽），抓取全A列表中止")
+            time.sleep(2); continue
+        fail_cnt = 0
         diff = d.get("data", {}).get("diff")
         if isinstance(diff, dict): diff = [diff]
         if not diff: break

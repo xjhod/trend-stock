@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.41"
+_BACKEND_VERSION = "1.9.42"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1560,7 +1560,7 @@ if __name__ == "__main__":
     # 数据自动同步线程（守护, 每天收盘后自动更新新浪长历史数据）
     try:
         threading.Thread(target=_datasync_loop, daemon=True).start()
-        print("数据自动同步线程已启动（启动后45s检查, 之后每6小时）")
+        print("数据自动同步线程已启动（启动后8s检查, 之后每6小时）")
     except Exception as e:
         print("数据同步线程启动失败:", e)
 
