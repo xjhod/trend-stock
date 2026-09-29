@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.43"
+_BACKEND_VERSION = "1.9.44"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1564,6 +1564,13 @@ if __name__ == "__main__":
     import socket as _socket
     _HOST = _os.environ.get("STOCK_HOST", "127.0.0.1")
     print(f"趋势全景 启动: http://{_HOST}:5000")
+    # 确保数据目录存在（全新安装场景）
+    try:
+        import fetch_sina_history as _fsh0
+        _bt = os.path.join(BASE_DIR, "bt_data")
+        os.makedirs(_bt, exist_ok=True)
+    except Exception:
+        pass
     # 数据自动同步线程（守护, 每天收盘后自动更新新浪长历史数据）
     try:
         threading.Thread(target=_datasync_loop, daemon=True).start()

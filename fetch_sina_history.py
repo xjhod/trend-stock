@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 BASE = os.path.dirname(os.path.abspath(__file__))
 HIGHFIT = os.path.join(BASE, "highfit_pool.json")
 DB = os.path.join(BASE, "bt_data", "history.db")
+os.makedirs(os.path.dirname(DB), exist_ok=True)  # 全新安装时自动创建数据目录
 U = "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
 H = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn"}
 
