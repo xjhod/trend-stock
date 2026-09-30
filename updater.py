@@ -150,28 +150,16 @@ def _zip_root(names):
 
 
 def check_update():
-    """多源回退：首选直链(aka, 无需GitHub域名) -> 逐个尝试GitHub各更新源"""
+    """GitHub latest.json 优先（固定路径, 可自动发现新版本）-> 直链兜底。
+    返回：{ok, has_update, current, latest, note, download, source}"""
     import requests
     cfg = load_config()
     cur0 = current_version()
-    direct = str(cfg.get("direct_url", "") or "").strip()
-    if direct:
-        try:
-            ver, _ = _zip_version_from_url(direct, timeout=25)
-            has_up = bool(ver) and _ver_tuple(ver) > _ver_tuple(cur0)
-            return {"ok": True, "has_update": has_up, "current": cur0, "latest": ver,
-                    "note": "直连更新源(aka)", "download": direct, "source": "直连(aka)"}
-        except Exception as e:
-            last_err = f"直连源失败：{e}"
-    else:
-        last_err = None
-    raw_latest = _raw_url(cfg, "latest")
-    raw_zip = _raw_url(cfg, "zip")
     tried = []
+    last_err = None
+    # 1) GitHub 版本清单（raw + jsdelivr 镜像, 取版本高者, 自动发现新版）
     for s in cfg["sources"]:
         prefix = str(s.get("prefix", ""))
-        # GitHub直连(prefix为空)：同时读 raw 直连(带时间戳,实时) 与 jsdelivr 镜像,
-        # 取版本号较高者 —— 规避 jsdelivr CDN 缓存滞后导致"明明推送了新版却显示已是最新"
         if not prefix:
             candidates = [
                 _bust(f"https://raw.githubusercontent.com/{cfg['owner']}/{cfg['repo']}/{cfg['branch']}/latest.json"),
@@ -182,39 +170,53 @@ def check_update():
                 try:
                     rr = requests.get(u, timeout=8)
                     rr.raise_for_status()
-                    metas.append(rr.json())
+                    j = rr.json()
+                    if isinstance(j, str):
+                        j = {"version": j.strip()}
+                    if isinstance(j, dict) and j.get("version"):
+                        metas.append(j)
                 except Exception:
                     continue
-            if not metas:
-                last_err = "GitHub直连读取版本失败"
-                continue
-            meta = max(metas, key=lambda m: _ver_tuple(str(m.get("version", ""))))
-        else:
-            url = _bust(prefix + raw_latest)
-        tried.append(s["name"])
+            if metas:
+                meta = max(metas, key=lambda m: _ver_tuple(str(m.get("version", "") or "")))
+                latest = str(meta.get("version", "") or "").strip()
+                has_update = bool(latest) and _ver_tuple(latest) > _ver_tuple(cur0)
+                dl = str(meta.get("download", "") or "").strip()
+                return {"ok": True, "has_update": has_update, "current": cur0, "latest": latest,
+                        "note": str(meta.get("note", "") or ""),
+                        "download": dl, "source": "GitHub(自动发现)"}
+            tried.append(s["name"])
+            continue
+        # 代理源（ghfast/ghproxy）: 同样读 latest.json
         try:
+            url = _bust(prefix + _raw_url(cfg, "latest"))
             r = requests.get(url, timeout=8)
             r.raise_for_status()
-            meta = r.json()
-            cur = current_version()
-            latest = str(meta.get("version", "")).strip()
-            has_update = bool(latest) and _ver_tuple(latest) > _ver_tuple(cur)
-            # 下载地址：原 latest.json 的 download（github 直链）若走代理则加前缀
-            dl = str(meta.get("download", "") or "").strip() or raw_zip
-            if s["prefix"] and dl.startswith("http"):
-                dl = s["prefix"] + dl
-            return {
-                "ok": True,
-                "has_update": has_update,
-                "current": cur,
-                "latest": latest,
-                "note": meta.get("note", ""),
-                "download": dl,
-                "source": s["name"],
-            }
+            j = r.json()
+            if isinstance(j, str):
+                j = {"version": j.strip()}
+            if not (isinstance(j, dict) and j.get("version")):
+                raise RuntimeError("清单格式异常")
+            latest = str(j.get("version", "") or "").strip()
+            has_update = bool(latest) and _ver_tuple(latest) > _ver_tuple(cur0)
+            dl = str(j.get("download", "") or "").strip()
+            return {"ok": True, "has_update": has_update, "current": cur0, "latest": latest,
+                    "note": str(j.get("note", "") or ""),
+                    "download": dl, "source": s["name"]}
         except Exception as e:
             last_err = e
+            tried.append(s["name"])
             continue
+    # 2) 兜底：直链(aka) 读自身 zip 内版本
+    direct = str(cfg.get("direct_url", "") or "").strip()
+    if direct:
+        try:
+            ver, _ = _zip_version_from_url(direct, timeout=25)
+            has_up = bool(ver) and _ver_tuple(ver) > _ver_tuple(cur0)
+            return {"ok": True, "has_update": has_up, "current": cur0, "latest": ver,
+                    "note": "直连更新源(aka)", "download": direct, "source": "直连(aka)"}
+        except Exception as e:
+            last_err = f"直连源失败：{e}"
     return {"ok": False, "msg": f"检查更新失败（已尝试 {len(tried)} 个源：{'、'.join(tried)}）：{last_err}"}
 
 
@@ -223,16 +225,16 @@ def apply_update(download_url):
     import requests
     cfg = load_config()
     raw_zip = _raw_url(cfg, "zip")
-    # 候选下载地址：直链(aka) -> 国内加速源 -> GitHub 直连兜底
+    # 候选下载地址：download_url(清单指定的最新链接) 优先 -> 直链(aka) -> 国内加速源
     candidates = []
+    if download_url:
+        candidates.append(download_url)
     direct = str(cfg.get("direct_url", "") or "").strip()
     if direct:
         candidates.append(direct)
     for s in cfg["sources"]:
         if s["prefix"]:
             candidates.append(s["prefix"] + raw_zip)
-    if download_url:
-        candidates.append(download_url)
     candidates = list(dict.fromkeys(candidates))  # 去重保序
     if not candidates:
         return {"ok": False, "msg": "缺少下载地址"}
