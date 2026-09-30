@@ -101,14 +101,19 @@ def refresh():
             # 买入日之后的部分（用于"买入以来最高"）
             if p.get("buy_date"):
                 dates = [str(r["date"]) for r in rows]
-                start = 0
+                start = len(dates)
                 for i, dt in enumerate(dates):
                     if dt >= p["buy_date"]:
                         start = i
                         break
+                if start >= len(dates):
+                    # K线尚未覆盖买入日（数据滞后）: 以买入价为基准, 尚未有"买入以来"走势,
+                    # 绝不退化成全历史最高——否则会用买入前几个月的高位误判回撤
+                    high_since = float(p.get("buy_price") or cur)
+                else:
+                    high_since = max(closes[start:])
             else:
-                start = 0
-            high_since = max(closes[start:]) if start < len(closes) else cur
+                high_since = max(closes) if closes else cur
             ret = (cur / p["buy_price"] - 1) * 100 if p.get("buy_price") else 0
             item["cur_price"] = round(cur, 2)
             item["ret_pct"] = round(ret, 2)
@@ -118,8 +123,13 @@ def refresh():
             style, style_note = env_judge.exit_style()
             item["exit_style"] = style
             if p.get("buy_price") and cur <= high_since * 0.90:
-                advice = "建议止损"
-                note = f"自买入以来最高 {high_since} 回撤已超10%（止损线）"
+                line = round(high_since * 0.90, 2)
+                if ret >= 0:
+                    advice = "建议止盈"
+                    note = f"买入以来最高 {high_since}，回撤超10%触发移动止盈（止盈线 {line}，现价 {cur:.2f}，仍浮盈+{ret:.1f}%）"
+                else:
+                    advice = "建议止损"
+                    note = f"买入以来最高 {high_since}，回撤超10%（止损线 {line}，现价 {cur:.2f}，浮亏{ret:.1f}%）"
             else:
                 # 破MA20
                 try:
@@ -184,20 +194,28 @@ def stock_position_info(code, daily_df=None):
                     closes = [r["close"] for r in rows]
                     if p.get("buy_date"):
                         dates = [str(r["date"]) for r in rows]
-                        start = 0
+                        start = len(dates)
                         for i, dt in enumerate(dates):
                             if dt >= p["buy_date"]:
                                 start = i; break
+                        if start >= len(dates):
+                            high_since = float(p.get("buy_price") or cur)
+                        else:
+                            high_since = max(closes[start:])
                     else:
-                        start = 0
-                    high_since = max(closes[start:]) if start < len(closes) else cur
+                        high_since = max(closes) if closes else cur
                     info["cur_price"] = round(cur, 2)
                     info["ret_pct"] = round((cur / p["buy_price"] - 1) * 100, 2)
                     style, style_note = env_judge.exit_style()
                     info["exit_style"] = style
                     if cur <= high_since * 0.90:
-                        info["advice"] = "建议止损"
-                        info["note"] = f"自买入以来最高 {round(high_since,2)} 回撤已超10%（止损线）"
+                        line = round(high_since * 0.90, 2)
+                        if (cur / p["buy_price"] - 1) * 100 >= 0:
+                            info["advice"] = "建议止盈"
+                            info["note"] = f"买入以来最高 {round(high_since,2)}，回撤超10%触发移动止盈（止盈线 {line}）"
+                        else:
+                            info["advice"] = "建议止损"
+                            info["note"] = f"买入以来最高 {round(high_since,2)}，回撤超10%（止损线 {line}）"
                     else:
                         try:
                             ma20 = float(daily_df["close"].iloc[-21:-1].mean())
