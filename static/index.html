@@ -251,6 +251,14 @@
     <div class="modal-title">在线更新 <span class="bt-sub">当前版本 <span id="upd-cur">-</span></span></div>
     <div id="upd-body">
       <div class="cfg-body" id="upd-result"></div>
+      <div class="cfg-sec" style="margin-top:8px;border-top:1px dashed var(--line,#e5e5e5);padding-top:10px">
+        <div class="cfg-title">手动升级（粘贴我发送的更新链接）</div>
+        <div style="display:flex;gap:6px;width:100%;margin-top:6px">
+          <input id="upd-link-input" type="text" placeholder="https://aka.doubaocdn.com/s/..." style="flex:1;padding:7px 9px;border:1px solid var(--line,#d9d9d9);border-radius:6px;font-size:12.5px;box-sizing:border-box">
+          <button class="modal-btn primary" id="upd-link-btn" onclick="window.__installFromLink()">用链接升级</button>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--text-dim);line-height:1.7">说明：程序无法自动发现新版（公司网络屏蔽GitHub，直链每次变化）。把我在对话里给你的新链接粘贴到这里点升级即可，自动下载+覆盖代码文件，完成后按提示重启。</div>
+      </div>
     </div>
     <div class="bt-foot">
       <button class="modal-btn primary" id="upd-go-btn" style="display:none">立即更新</button>

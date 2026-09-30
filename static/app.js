@@ -2115,71 +2115,79 @@
             '<div style="margin-top:10px;font-size:11px;color:var(--text-dim)">更新只替换代码文件，你的自选股、机会数据、推送设置都会保留。</div>');
           const go = document.getElementById("upd-go-btn");
           go.style.display = "";
-          go.onclick = function () {
-            go.disabled = true; go.textContent = "正在提交…";
-            fetch("/api/update/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ download: d.download }) })
-              .then(function (r) { return r.json(); })
-              .then(function (r2) {
-                if (r2 && r2.started) {
-                  updShow("正在更新…<br><br><span id='upd-prog' style='color:var(--accent)'>准备中…</span>" +
-                    "<div style='margin-top:10px;font-size:11px;color:var(--text-dim)'>更新在后台进行，页面不会被卡住；完成后按提示重启软件即可。请勿在更新期间关闭页面。</div>" +
-                    "<div style='margin-top:14px;text-align:center'><button id='upd-done-manual' style='padding:6px 16px;border:1px solid var(--line,#d9d9d9);border-radius:6px;background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer'>已完成，去重启软件</button></div>");
-                  go.style.display = "none";
-                  var updTimedOut = false;
-                  var updTimeout = setTimeout(function () {
-                    updTimedOut = true;
-                    var p = document.getElementById("upd-prog");
-                    if (p) p.innerHTML = "<span style='color:var(--down)'>更新已超过3分钟，文件大概率已替换完成</span><br>请关闭软件窗口后重新双击启动，即可使用最新版。";
-                  }, 180000);
-                  var manualBtn = document.getElementById("upd-done-manual");
-                  if (manualBtn) manualBtn.onclick = function () {
-                    clearInterval(poll);
-                    clearTimeout(updTimeout);
-                    updHide();
-                  };
-                  var poll = setInterval(function () {
-                    fetch("/api/update/progress").then(function (r) { return r.json(); }).then(function (st) {
-                      var p = document.getElementById("upd-prog");
-                      if (!p) { clearInterval(poll); clearTimeout(updTimeout); return; }
-                      if (st.state === "done") {
-                        clearInterval(poll);
-                        clearTimeout(updTimeout);
-                        if (st.restart) {
-                          updShow("✅ " + st.msg + "<br><br><span style='color:var(--accent)'>3 秒后自动重启，请稍候…</span><br><span style='font-size:11px;color:var(--text-dim)'>重启后请刷新或重新打开本页面，顶部版本号应显示最新版。</span>");
-                        } else {
-                          updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
-                        }
-                      } else if (st.state === "error") {
-                        clearInterval(poll);
-                        clearTimeout(updTimeout);
-                        updShow("更新失败：" + st.msg + "<br><br>可稍后重试或检查网络。");
-                        go.style.display = ""; go.disabled = false; go.textContent = "重新更新";
-                      } else {
-                        if (!updTimedOut) p.textContent = st.msg;
-                      }
-                    }).catch(function () {
-                      var p = document.getElementById("upd-prog");
-                      if (p && !updTimedOut) p.textContent = "网络波动，继续等待…（文件可能已在后台替换中）";
-                    });
-                  }, 2000);
-                } else {
-                  updShow("更新失败：" + ((r2 && r2.msg) || "未知错误"));
-                  go.disabled = false; go.textContent = "立即更新";
-                }
-              }).catch(function () { updShow("更新请求失败，请检查网络"); go.disabled = false; go.textContent = "立即更新"; });
-          };
+          go.onclick = function () { applyDownload(d.download); };
         } else {
-          if (!silent) updShow("已是最新版本（v" + d.current + "）。");
+          updShow((d.note && d.note.indexOf("直连") >= 0)
+            ? "当前已是最新版本 <b>" + (d.current || "-") + "</b><br><br>如果你是从对话里拿到的新版本链接，请用下方“手动升级”输入框粘贴链接后升级。"
+            : (d.note || "当前已是最新版本 " + (d.current || "-")));
         }
+      } else if (d && d.msg) {
+        curEl.textContent = "-";
+        updShow("检查更新失败：" + d.msg);
       } else {
         curEl.textContent = "-";
-        if (!silent) updShow((d && d.msg) || "检查更新失败（未配置更新源或网络异常）。");
+        updShow("检查更新失败（网络或更新源不可用）");
       }
     }).catch(function () {
-      if (!silent) updShow("检查更新失败（网络异常）。");
+      const curEl = document.getElementById("upd-cur");
+      if (curEl) curEl.textContent = "-";
+      updShow("检查更新失败：请求超时或网络异常<br><br>如果你是从对话里拿到的新版本链接，请用下方“手动升级”输入框粘贴链接后升级。");
     });
   }
-  window.__checkUpdate = function () { checkUpdate(false); };
+  function applyDownload(url) {
+    const go = document.getElementById("upd-go-btn");
+    fetch("/api/update/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ download: url }) })
+      .then(function (r) { return r.json(); })
+      .then(function (r2) {
+        if (r2 && r2.started) {
+          updShow("正在更新…<br><br><span id='upd-prog' style='color:var(--accent)'>准备中…</span>" +
+            "<div style='margin-top:10px;font-size:11px;color:var(--text-dim)'>更新在后台进行，页面不会被卡住；完成后按提示重启软件即可。请勿在更新期间关闭页面。</div>" +
+            "<div style='margin-top:14px;text-align:center'><button id='upd-done-manual' style='padding:6px 16px;border:1px solid var(--line,#d9d9d9);border-radius:6px;background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer'>已完成，去重启软件</button></div>");
+          go.style.display = "none";
+          var updTimedOut = false;
+          var updTimeout = setTimeout(function () {
+            updTimedOut = true;
+            var p = document.getElementById("upd-prog");
+            if (p) p.innerHTML = "<span style='color:var(--down)'>更新已超过3分钟，文件大概率已替换完成</span><br>请关闭软件窗口后重新双击启动，即可使用最新版。";
+          }, 180000);
+          var manualBtn = document.getElementById("upd-done-manual");
+          var poll = setInterval(function () {
+            fetch("/api/update/progress").then(function (r) { return r.json(); }).then(function (st) {
+              var p = document.getElementById("upd-prog");
+              if (!p) { clearInterval(poll); clearTimeout(updTimeout); return; }
+              if (st.state === "done") {
+                clearInterval(poll); clearTimeout(updTimeout);
+                if (st.restart) {
+                  updShow("✅ " + st.msg + "<br><br><span style='color:var(--accent)'>3 秒后自动重启，请稍候…</span><br><span style='font-size:11px;color:var(--text-dim)'>重启后请刷新或重新打开本页面，顶部版本号应显示最新版。</span>");
+                } else {
+                  updShow("✅ " + st.msg + "<br><br>请<b>关闭软件窗口后重新双击启动</b>，即可使用最新版。");
+                }
+              } else if (st.state === "error") {
+                clearInterval(poll); clearTimeout(updTimeout);
+                updShow("更新失败：" + st.msg + "<br><br>可稍后重试或检查网络。");
+                go.style.display = ""; go.disabled = false; go.textContent = "重新更新";
+              } else {
+                if (!updTimedOut) p.textContent = st.msg;
+              }
+            }).catch(function () {
+              var p = document.getElementById("upd-prog");
+              if (p && !updTimedOut) p.textContent = "网络波动，继续等待…（文件可能已在后台替换中）";
+            });
+          }, 2000);
+          if (manualBtn) manualBtn.onclick = function () { clearInterval(poll); clearTimeout(updTimeout); updHide(); };
+        } else {
+          updShow("更新失败：" + ((r2 && r2.msg) || "未知错误"));
+          go.disabled = false; go.textContent = "立即更新";
+        }
+      }).catch(function () { updShow("更新请求失败，请检查网络"); go.disabled = false; go.textContent = "立即更新"; });
+  }
+  window.__installFromLink = function () {
+    const input = document.getElementById("upd-link-input");
+    const url = input ? input.value.trim() : "";
+    if (!url || !/^https?:\/\//i.test(url)) { alert("请粘贴有效的更新链接（https:// 开头）"); return; }
+    if (!/aka\.doubaocdn\.com|\.zip/i.test(url)) { alert("链接需为 zip 更新包直链（aka.doubaocdn.com 开头）"); return; }
+    applyDownload(url);
+  };
   window.__closeUpdate = updHide;
   // 启动静默检查：有新版才提示，避免打扰
   setTimeout(function () { checkUpdate(true); }, 4000);
