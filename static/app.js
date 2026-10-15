@@ -1017,7 +1017,9 @@
       return arr;
     };
 
-    const volColors = rows.map(r => (r.close >= r.open ? "rgba(229,72,77,.55)" : "rgba(48,164,108,.55)"));
+    // A股惯例：红涨绿跌按"收盘 vs 昨收"着色（避免假阳线/假阴线误导）；首根无昨收用开收盘
+    const kUp = rows.map((r, i) => i === 0 ? r.close >= r.open : r.close >= rows[i - 1].close);
+    const volColors = rows.map((r, i) => (kUp[i] ? "rgba(229,72,77,.55)" : "rgba(48,164,108,.55)"));
 
     // ---- 叠加图层：核心信号固定（趋势线/支撑阻力/形态/跳空/背离），辅助工具开关（均线/布林带/斐波那契） ----
     const ovMa = document.getElementById("ov-ma") && document.getElementById("ov-ma").classList.contains("on");
@@ -1031,8 +1033,10 @@
       {
         name: "K线", type: "candlestick", data: k,
         itemStyle: {
-          color: "#e5484d", color0: "#30a46c",
-          borderColor: "#e5484d", borderColor0: "#30a46c"
+          color: p => (kUp[p.dataIndex] ? "#e5484d" : "#30a46c"),
+          color0: p => (kUp[p.dataIndex] ? "#e5484d" : "#30a46c"),
+          borderColor: p => (kUp[p.dataIndex] ? "#e5484d" : "#30a46c"),
+          borderColor0: p => (kUp[p.dataIndex] ? "#e5484d" : "#30a46c")
         },
         markPoint: {
           data: gapMarks.concat(patMarks, divMarks),

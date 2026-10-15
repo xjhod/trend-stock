@@ -1,5 +1,5 @@
 {
-  "version": "1.9.56",
-  "download": "https://aka.doubaocdn.com/s/esNnxHPayW",
-  "note": "修复三日期显示被覆盖的bug(大盘/个股/行业)"
+  "version": "1.9.57",
+  "download": "https://aka.doubaocdn.com/s/hAqKlOsIYX",
+  "note": "K线红绿按A股涨跌惯例着色(收vs昨收), 修复假阳线红K"
 }
