@@ -2339,11 +2339,9 @@
             dateTxt += " ⚠个股未同步";
             el.style.color = "var(--warn)";
           } else {
-            el.style.color = "";
+            el.style.color = "var(--text-dim)";
           }
           el.textContent = dateTxt;
-          el.textContent = "数据截至 " + ds.last;
-          el.style.color = "var(--text-dim)";
         }
       }).catch(function () {});
     } catch (e) {}
