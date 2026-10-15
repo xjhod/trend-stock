@@ -1,5 +1,5 @@
 {
-  "version": "1.9.52",
-  "download": "https://aka.doubaocdn.com/s/1zIW6iGBIt",
-  "note": "行业轮动三优化: A行业指数口径统一(改用25年等权指数) + C个股分页加载更多 + B大盘五态进入排序(回避区独立行情置顶)"
+  "version": "1.9.53",
+  "download": "https://aka.doubaocdn.com/s/H4FreImVrQ",
+  "note": "行业指数自动同步修复(增量更新到最新交易日) + 行业排序池内跟涨因子 + 页面缓存"
 }

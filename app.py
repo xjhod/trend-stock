@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.52"
+_BACKEND_VERSION = "1.9.53"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1317,9 +1317,18 @@ def _calc_ind_trend(rows):
     return direction, strength, round(score, 1), round(ma20_slope, 3), round(ret20, 1)
 
 
+INDUSTRY_TREND_CACHE = {}  # (time, result), 5分钟缓存: 行业排序大盘依赖变化慢, 避免每次全算
+
+
 @app.route("/api/industry/trend")
 def api_industry_trend():
-    """行业趋势看板：趋势向上行业 + 独立行情标记（置顶）"""
+    """行业趋势看板：趋势向上行业 + 独立行情标记（置顶）。
+    排序 = 大盘五态环境 × 池内跟涨因子（独立行情但池内无强势股降级, 防"排第一但没标的"）"""
+    import time as _tm
+    _force = str(request.args.get("force", "") or "") == "1"
+    _c0 = INDUSTRY_TREND_CACHE.get("v")
+    if not _force and _c0 and _tm.time() - _c0[0] < 300:
+        return jsonify(_c0[1])
     ind_cache = layers._load_ind_cache()
     pool = _effective_pool()
     mkt_rows = _safe_call(layers.get_market_kline, [])
@@ -1334,33 +1343,66 @@ def api_industry_trend():
             regime = layers.env_regime([r["close"] for r in mkt_long])
     except Exception:
         regime = None
+    # 池内强势股统计（数据库秒级）：板块指数强势≠池内个股跟涨, 用于排序防误导
+    _strong_codes = set()
+    try:
+        import sqlite3 as _sq3
+        import fetch_sina_history as _fsh
+        _conn = _sq3.connect(_fsh.DB)
+        _conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_date ON stock_daily(date)")
+        _d30_min = _conn.execute("SELECT DISTINCT date FROM stock_daily ORDER BY date DESC LIMIT 1 OFFSET 29").fetchone()
+        if _d30_min:
+            _all = _conn.execute("SELECT code, date, close FROM stock_daily WHERE date >= ? ORDER BY code, date", (_d30_min[0],)).fetchall()
+            _by = {}
+            for _c, _d, _cl in _all:
+                _by.setdefault(_c, []).append((_d, _cl))
+            for _s in pool:
+                _seq = [v for _, v in _by.get(str(_s.get("code")), [])]
+                if len(_seq) < 21:
+                    continue
+                _ma20 = sum(_seq[-20:]) / 20
+                _ma20p = sum(_seq[-21:-1]) / 20
+                _ma5 = sum(_seq[-5:]) / 5
+                _ma10 = sum(_seq[-10:]) / 10
+                if _seq[-1] > _ma20 and _ma20 > _ma20p and _ma5 > _ma10:
+                    _strong_codes.add(str(_s.get("code")))
+        _conn.close()
+    except Exception:
+        _strong_codes = set()
     results = []
     for ind_name, rows in ind_cache.items():
         if not ind_name or ind_name == "未知" or len(rows) < 25:
             continue
         direction, strength, score, ma20_slope, ret20 = _calc_ind_trend(rows)
-        count = sum(1 for s in pool if s.get("ind") == ind_name)
+        ind_stocks = [s for s in pool if s.get("ind") == ind_name]
+        count = len(ind_stocks)
+        strong_n = sum(1 for s in ind_stocks if str(s.get("code")) in _strong_codes)
         indep, excess, _mm, streak = _ind_independent(rows, mkt_rows)
         rho, up_beta, dn_beta, rho_n = _ind_rho_beta(rows, mkt_rows)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
-            "stock_count": count, "latest_close": round(rows[-1]["close"], 2),
+            "stock_count": count, "strong_n": strong_n,
+            "latest_close": round(rows[-1]["close"], 2),
             "independent": indep, "excess": excess, "streak": streak,
             "rho": rho, "up_beta": up_beta, "dn_beta": dn_beta, "rho_n": rho_n,
         })
-    # 排序（按大盘环境分层）：
-    #   回避区(熊市反弹/牛深回调/深熊底)：独立行情绝对置顶(逆势强势最稀缺) → 上升 → 横盘 → 下降
+    # 排序（按大盘环境分层 + 池内跟涨因子）：
+    #   回避区/方向不明：独立行情+池内有强势股 置顶 → 上升 → 独立但池内无强势(降级) → 横盘 → 下降
     #   健康牛：顺势上升优先(score主导)，独立行情不特殊置顶(牛市中逆势罕见)
-    #   方向不明/其他：独立行情置顶 → 上升 → 横盘 → 下降
     dir_rank = {"up": 0, "sideways": 1, "down": 2}
     rk = regime.get("key") if regime else None
     def _sort_key(x):
         indep = 1 if x["independent"] else 0
         d = x["direction"]
-        if rk in ("bear_rally", "bull_pullback", "bear_bottom"):
-            return (0 if indep else 1 + dir_rank.get(d, 3),
-                    -x["excess"] if indep else -x["score"])
+        if rk in ("bear_rally", "bull_pullback", "bear_bottom", "sideways", None):
+            if indep and x["strong_n"] > 0:
+                return (0, -x["excess"])
+            if d == "up":
+                return (1, -x["score"])
+            if indep:
+                return (2, -x["excess"])
+            return (3 + dir_rank.get(d, 3), -x["score"])
         if rk == "bull_strong":
             return (dir_rank.get(d, 3), -x["score"])
         return (0 if indep else 1 + dir_rank.get(d, 3),
@@ -1373,9 +1415,11 @@ def api_industry_trend():
         reg_info = {"key": regime["key"], "state": regime["state"],
                     "up60": regime.get("up60"), "avg60": regime.get("avg60"),
                     "desc": regime.get("desc", "")}
-    return jsonify({"ok": True, "total_up": total_up, "total_ind": len(results),
-                    "total_indep": total_indep, "mkt_mom20": mkt_mom20,
-                    "regime": reg_info, "items": results})
+    _resp = {"ok": True, "total_up": total_up, "total_ind": len(results),
+             "total_indep": total_indep, "mkt_mom20": mkt_mom20,
+             "regime": reg_info, "items": results}
+    INDUSTRY_TREND_CACHE["v"] = (_tm.time(), _resp)
+    return jsonify(_resp)
 
 
 @app.route("/api/industry/<ind_name>/stocks")

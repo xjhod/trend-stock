@@ -85,35 +85,62 @@ def is_stale(mkt_sym="sh000001"):
         latest = arr[-1]["day"]
         return last < latest
     except Exception:
-        return False
+        # 实时接口失败（如公司网络屏蔽）: 降级为自然日判断——db 最后日期距今 >=4 个自然日视为过期
+        # （容忍周末2天+节假日1天; 第4天才触发, 避免误判）
+        try:
+            import sqlite3 as _sq
+            _c = _sq.connect(DB)
+            _last = _c.execute("SELECT MAX(date) FROM mkt_daily WHERE sym=?", (mkt_sym,)).fetchone()[0]
+            _c.close()
+            if not _last:
+                return True
+            import datetime as _dt
+            _dl = _dt.date(*map(int, str(_last).split("-")))
+            return (_dt.date.today() - _dl).days >= 4
+        except Exception:
+            return False
 
 
 def sync_stocks(limit=0, workers=10, cb=None):
-    """全量拉取股票K线（幂等, INSERT OR REPLACE）。返回 (ok, fail)"""
+    """增量同步股票K线：已有股票拉最近600根覆盖尾部, 全新股票拉全量。
+    修复: 旧版"库里有记录就跳过"导致个股/行业指数永远停在首次入库日期。
+    返回 (ok, fail)"""
     pool = json.load(open(HIGHFIT, encoding="utf-8"))
     if limit:
         pool = pool[:limit]
     conn = sqlite3.connect(DB)
-    done = set(r[0] for r in conn.execute("SELECT DISTINCT code FROM stock_daily"))
-    todo = [p for p in pool if str(p["code"]) not in done]
+    # 每只股票的最后日期（用于跳过已最新的 + 决定增量根数）
+    last_of = {}
+    for _c, _d in conn.execute("SELECT code, MAX(date) FROM stock_daily GROUP BY code"):
+        last_of[_c] = _d
+    # 大盘最新交易日（同步过指数后才有；用于跳过已最新的股票）
+    latest_day = None
+    try:
+        latest_day = conn.execute("SELECT MAX(date) FROM mkt_daily WHERE sym='sh000001'").fetchone()[0]
+    except Exception:
+        pass
     if cb:
-        cb(f"股票: 待拉 {len(todo)} / 已入库 {len(done)}")
-    if not todo:
-        conn.close()
-        return 0, 0
-    ok = fail = 0
+        cb(f"股票: 增量检查 {len(pool)} 只（已入库 {len(last_of)}）")
+    ok = fail = skip = 0
 
     def one(p):
-        arr = fetch(to_sina(p["code"]))
+        code = str(p["code"])
+        last = last_of.get(code)
+        if last and latest_day and last >= latest_day:
+            return (p, None, "skip")  # 已是最新交易日, 跳过
+        n = 6011 if not last else 600  # 全新=全量; 已有=最近600根(约2.4年, 覆盖同步间隔)
+        arr = fetch(to_sina(code), datalen=n)
         if not arr:
-            return (p, None)
-        rows = [(str(p["code"]), r["day"], float(r["open"]), float(r["high"]),
+            return (p, None, "fail")
+        rows = [(code, r["day"], float(r["open"]), float(r["high"]),
                  float(r["low"]), float(r["close"]), float(r.get("volume", 0) or 0)) for r in arr]
-        return (p, rows)
+        return (p, rows, "ok")
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        for p, rows in ex.map(one, todo):
-            if rows:
+        for p, rows, st in ex.map(one, pool):
+            if st == "skip":
+                skip += 1
+            elif rows:
                 try:
                     conn.executemany("INSERT OR REPLACE INTO stock_daily VALUES(?,?,?,?,?,?,?)", rows)
                     conn.commit()
@@ -123,6 +150,8 @@ def sync_stocks(limit=0, workers=10, cb=None):
             else:
                 fail += 1
     conn.close()
+    if cb:
+        cb(f"股票: 更新 {ok} / 已最新跳过 {skip} / 失败 {fail}")
     return ok, fail
 
 

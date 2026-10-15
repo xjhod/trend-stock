@@ -2394,9 +2394,14 @@
         // 强度标签
         const strengthCls = it.strength === "strong" ? "strong" : (it.strength === "medium" ? "medium" : "weak");
         const strengthText = it.strength === "strong" ? "强" : (it.strength === "medium" ? "中" : "弱");
-        // 独立行情徽标：行业强 + 大盘不强，已置顶
-        const indepTag = it.independent ? '<span class="ind-strength-tag" style="background:#7c3aed;color:#fff">独立行情</span>' : '';
-        const indepMeta = it.independent ? '<span style="color:#7c3aed;font-size:11px">跑赢大盘+' + it.excess + '%</span>' : '';
+        // 独立行情徽标：行业强 + 大盘不强，已置顶（附池内跟涨标注）
+        var indepTag = '';
+        var indepMeta = '';
+        if (it.independent) {
+          var poolTxt = (it.strong_n > 0 ? '池内' + it.strong_n + '只强势' : '池内无强势');
+          indepTag = '<span class="ind-strength-tag" style="background:' + (it.strong_n > 0 ? '#7c3aed' : '#9a6a2f') + ';color:#fff">独立行情</span>';
+          indepMeta = '<span style="color:' + (it.strong_n > 0 ? '#7c3aed' : '#9a6a2f') + ';font-size:11px">跑赢大盘+' + it.excess + '% · ' + poolTxt + '</span>';
+        }
         div.innerHTML =
           '<div class="ind-name">' +
             '<span style="color:' + dirColor + ';font-size:12px;width:18px">' + dirArrow + '</span>' +
@@ -2423,6 +2428,7 @@
     } catch (e) {
       if (infoEl) infoEl.textContent = "加载失败：" + e.message;
     }
+    window.__indTrendLoading = false;
   }
 
   // mini dual-line: stock(blue) vs industry(orange), start-normalized to 100
