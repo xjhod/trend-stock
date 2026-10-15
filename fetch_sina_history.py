@@ -128,7 +128,7 @@ def sync_stocks(limit=0, workers=10, cb=None):
         last = last_of.get(code)
         if last and latest_day and last >= latest_day:
             return (p, None, "skip")  # 已是最新交易日, 跳过
-        n = 6011 if not last else 600  # 全新=全量; 已有=最近600根(约2.4年, 覆盖同步间隔)
+        n = 6011 if not last else 60  # 全新=全量; 已有=最近60根(约3个月, 足够覆盖同步间隔, 拉取更快更稳)
         arr = fetch(to_sina(code), datalen=n)
         if not arr:
             return (p, None, "fail")

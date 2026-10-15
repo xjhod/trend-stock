@@ -1,5 +1,5 @@
 {
-  "version": "1.9.53",
-  "download": "https://aka.doubaocdn.com/s/H4FreImVrQ",
-  "note": "行业指数自动同步修复(增量更新到最新交易日) + 行业排序池内跟涨因子 + 页面缓存"
+  "version": "1.9.54",
+  "download": "https://aka.doubaocdn.com/s/hk0adpqAuu",
+  "note": "新增手动同步数据按钮(解决行业数据不更新) + 增量拉取提速"
 }

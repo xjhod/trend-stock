@@ -2564,6 +2564,30 @@
     if (vb && d && d.version) { vb.textContent = "v" + d.version; }
   }).catch(function () {});
 
+    const indDataSync = document.getElementById("ind-datasync");
+    if (indDataSync) indDataSync.addEventListener("click", function () {
+      if (indDataSync.disabled) return;
+      indDataSync.disabled = true;
+      const oldT = indDataSync.textContent;
+      indDataSync.textContent = "同步中…";
+      fetch("/api/datasync/run", { method: "POST" }).then(function (r) { return r.json(); }).then(function () {
+        const poll = setInterval(function () {
+          fetch("/api/datasync/status").then(function (r) { return r.json(); }).then(function (st) {
+            if (!st.running) {
+              clearInterval(poll);
+              indDataSync.disabled = false;
+              indDataSync.textContent = "✓ 已完成";
+              setTimeout(function () { indDataSync.textContent = oldT; }, 2000);
+              loadIndustryTrend(true);
+            }
+          }).catch(function () {});
+        }, 2000);
+      }).catch(function () {
+        indDataSync.disabled = false;
+        indDataSync.textContent = oldT;
+        alert("同步请求失败，请检查网络");
+      });
+    });
     const indRefresh = document.getElementById("ind-refresh");
     if (indRefresh) indRefresh.addEventListener("click", function () {
       if (indRefresh.disabled) return;

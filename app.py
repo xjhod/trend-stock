@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.53"
+_BACKEND_VERSION = "1.9.54"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1644,6 +1644,13 @@ def _datasync_loop():
 @app.route("/api/datasync/status")
 def api_datasync_status():
     """数据同步状态（自动任务用）"""
+    return jsonify(datasync_status())
+
+
+@app.route("/api/datasync/run", methods=["POST"])
+def api_datasync_run():
+    """手动立即同步（增量, 约1-3分钟, 幂等, 加锁防并发）。返回当前状态"""
+    _datasync_worker()
     return jsonify(datasync_status())
 
 
