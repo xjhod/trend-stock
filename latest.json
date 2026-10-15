@@ -1,5 +1,5 @@
 {
-  "version": "1.9.50",
-  "download": "https://aka.doubaocdn.com/s/S9PXOFWqt5",
-  "note": "升级弹窗优化: 已是最新时明确显示状态; 修正过时文案"
+  "version": "1.9.51",
+  "download": "https://aka.doubaocdn.com/s/2QtUaiNpY5",
+  "note": "修复盘中K线显示为收盘价: 当日未收盘时标注'最新(盘中)'"
 }

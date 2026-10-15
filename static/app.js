@@ -1084,7 +1084,15 @@
               if (!r) continue;
               lines.push("<b>" + r.date + "</b>");
               lines.push("开盘: " + r.open);
-              lines.push("收盘: " + r.close);
+              var _d0 = new Date(), _dp = r.date.split("-");
+              var _isToday = _dp.length === 3 && parseInt(_dp[0], 10) === _d0.getFullYear() && parseInt(_dp[1], 10) === (_d0.getMonth() + 1) && parseInt(_dp[2], 10) === _d0.getDate();
+              var _wday = _d0.getDay(), _mins = _d0.getHours() * 60 + _d0.getMinutes();
+              if (_isToday && _wday !== 0 && _wday !== 6 && _mins < 15 * 60 + 5) {
+                lines.push("最新(盘中): " + r.close);
+                lines.push('<span style="color:#f5a623;font-size:11px">当日盘中实时数据，收盘后自动定格</span>');
+              } else {
+                lines.push("收盘: " + r.close);
+              }
               lines.push("最低: " + r.low);
               lines.push("最高: " + r.high);
               lines.push("成交量: " + r.volume);
