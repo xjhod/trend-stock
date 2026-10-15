@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.54"
+_BACKEND_VERSION = "1.9.55"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1546,8 +1546,12 @@ def datasync_status():
         import sqlite3
         conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bt_data", "history.db"))
         last = conn.execute("SELECT MAX(date) FROM mkt_daily WHERE sym='sh000001'").fetchone()[0]
+        stock_last = conn.execute("SELECT MAX(date) FROM stock_daily").fetchone()[0]
+        ind_last = conn.execute("SELECT MAX(date) FROM ind_daily").fetchone()[0]
         conn.close()
         _datasync_state["last"] = last or ""
+        _datasync_state["stock_last"] = stock_last or ""
+        _datasync_state["ind_last"] = ind_last or ""
     except Exception:
         pass
     return dict(_datasync_state)

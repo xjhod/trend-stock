@@ -1,5 +1,5 @@
 {
-  "version": "1.9.54",
-  "download": "https://aka.doubaocdn.com/s/hk0adpqAuu",
-  "note": "新增手动同步数据按钮(解决行业数据不更新) + 增量拉取提速"
+  "version": "1.9.55",
+  "download": "https://aka.doubaocdn.com/s/9ndzye3h3G",
+  "note": "行业页显示大盘/个股/行业三日期, 个股未同步标黄警示"
 }

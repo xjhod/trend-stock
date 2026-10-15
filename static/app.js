@@ -2332,6 +2332,16 @@
           el.textContent = "数据过期, 自动同步中…";
           el.style.color = "var(--warn)";
         } else if (ds.last) {
+          var dateTxt = "大盘 " + ds.last;
+          if (ds.stock_last) dateTxt += " · 个股 " + ds.stock_last;
+          if (ds.ind_last) dateTxt += " · 行业 " + ds.ind_last;
+          if (ds.stock_last && ds.stock_last < ds.last) {
+            dateTxt += " ⚠个股未同步";
+            el.style.color = "var(--warn)";
+          } else {
+            el.style.color = "";
+          }
+          el.textContent = dateTxt;
           el.textContent = "数据截至 " + ds.last;
           el.style.color = "var(--text-dim)";
         }
