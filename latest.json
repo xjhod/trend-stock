@@ -1,5 +1,5 @@
 {
-  "version": "1.9.51",
-  "download": "https://aka.doubaocdn.com/s/2QtUaiNpY5",
-  "note": "修复盘中K线显示为收盘价: 当日未收盘时标注'最新(盘中)'"
+  "version": "1.9.52",
+  "download": "https://aka.doubaocdn.com/s/1zIW6iGBIt",
+  "note": "行业轮动三优化: A行业指数口径统一(改用25年等权指数) + C个股分页加载更多 + B大盘五态进入排序(回避区独立行情置顶)"
 }

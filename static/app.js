@@ -2363,10 +2363,26 @@
             }).catch(function () { infoEl.textContent = "行业数据未就绪（网络或数据源异常）"; });
           } catch (e) { infoEl.textContent = "行业数据未就绪"; }
         } else {
-          infoEl.textContent = "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个" + (indepN ? " · 独立行情 " + indepN + " 个" : "") + "（市值≥30亿）";
+          var regTxt = "", regNote = "";
+          if (data.regime && data.regime.state) {
+            var _k = data.regime.key;
+            var _tag = _k === "bull_strong" ? "顺势进攻" : (_k === "bear_rally" || _k === "bull_pullback" ? "回避区" : (_k === "bear_bottom" ? "均值回归" : "方向不明"));
+            regTxt = "[" + data.regime.state + "·" + _tag + "] ";
+            if (_k === "bear_rally" || _k === "bull_pullback" || _k === "bear_bottom") {
+              regNote = "回避区：仅建议关注紫色【独立行情】行业，其余观望";
+            }
+          }
+          infoEl.textContent = regTxt + "全部 " + totalN + " 个行业 · 趋势向上 " + upN + " 个" + (indepN ? " · 独立行情 " + indepN + " 个" : "") + "（市值≥30亿）";
+          window.__indRegNote = regNote;
         }
       }
       listEl.innerHTML = "";
+      if (window.__indRegNote) {
+        var _regBar = document.createElement("div");
+        _regBar.style.cssText = "padding:6px 10px;margin-bottom:8px;border:1px dashed #7c3aed;border-radius:6px;font-size:11.5px;color:#a371f7;line-height:1.6";
+        _regBar.textContent = window.__indRegNote;
+        listEl.appendChild(_regBar);
+      }
       (data.items || []).forEach(function (it, idx) {
         const div = document.createElement("div");
         div.className = "ind-item" + (currentInd === it.name ? " active" : "");
@@ -2436,6 +2452,9 @@
   // ---- 行业个股列表：分批渲染 + 滚动加载（避免一次性渲染大列表卡死浏览器）----
   let indStocksData = null;      // 当前行业的完整个股数据
   let indRenderCount = 0;        // 已渲染条数
+  let indPage = 0;               // 当前已加载的页(每页50)
+  let indHasMore = false;        // 后端是否还有下一页
+  let indLoadingMore = false;    // 是否正在加载下一页
   let indStockEl = null;         // 列表容器引用
   const IND_BATCH = 25;          // 每批渲染条数
 
@@ -2480,6 +2499,27 @@
     }
   }
 
+  async function loadMoreIndStocks() {
+    if (indLoadingMore || !currentInd || !indHasMore) return;
+    indLoadingMore = true;
+    const listEl = indStockEl || document.getElementById("ind-stocks-list");
+    try {
+      const res = await fetch("/api/industry/" + encodeURIComponent(currentInd) + "/stocks?offset=" + ((indPage + 1) * 50));
+      const data = await res.json();
+      if (data.ok && data.items && data.items.length) {
+        indPage += 1;
+        indHasMore = !!data.has_more;
+        indStocksData = indStocksData.concat(data.items);
+        renderIndStocksBatch();
+      } else {
+        indHasMore = false;
+      }
+    } catch (e) {
+      indHasMore = false;
+    }
+    indLoadingMore = false;
+  }
+
   async function loadIndustryStocks(indName) {
     const listEl = document.getElementById("ind-list");
     const stocksEl = document.getElementById("ind-stocks");
@@ -2489,9 +2529,9 @@
     if (listEl) listEl.style.display = "none";
     if (stocksEl) stocksEl.style.display = "";
     if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载中…</li>';
-    indStocksData = null; indRenderCount = 0;
+    indStocksData = null; indRenderCount = 0; indPage = 0; indHasMore = false; indLoadingMore = false;
     try {
-      const res = await fetch("/api/industry/" + encodeURIComponent(indName) + "/stocks");
+      const res = await fetch("/api/industry/" + encodeURIComponent(indName) + "/stocks?offset=0");
       const data = await res.json();
       if (!data.ok) throw new Error(data.msg || "加载失败");
       const withSig = data.with_signal || 0;
@@ -2504,6 +2544,7 @@
       }
       indStocksData = data.items;
       indRenderCount = 0;
+      indHasMore = !!data.has_more;
       renderIndStocksBatch();
     } catch (e) {
       if (stocksListEl) stocksListEl.innerHTML = '<li class="flat" style="color:var(--text-dim);font-size:13px;padding:20px 16px">加载失败：' + e.message + '</li>';
@@ -2547,9 +2588,13 @@
     // 行业个股列表：滚动接近底部时自动追加下一批（分批渲染防卡顿）
     const indStocksList = document.getElementById("ind-stocks-list");
     if (indStocksList) indStocksList.addEventListener("scroll", function () {
-      if (!indStocksData || indRenderCount >= indStocksData.length) return;
+      if (!indStocksData) return;
       if (this.scrollTop + this.clientHeight >= this.scrollHeight - 60) {
-        renderIndStocksBatch();
+        if (indRenderCount < indStocksData.length) {
+          renderIndStocksBatch();
+        } else if (indHasMore && !indLoadingMore) {
+          loadMoreIndStocks();
+        }
       }
     });
   });

@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.51"
+_BACKEND_VERSION = "1.9.52"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1326,6 +1326,14 @@ def api_industry_trend():
     mkt_mom20 = None
     if len(mkt_rows) >= 21:
         mkt_mom20 = round((mkt_rows[-1]["close"] / mkt_rows[-21]["close"] - 1) * 100, 1)
+    # 大盘五态环境（16年回测, 不滞后）：进入行业排序, 实现"先大盘→再行业"分层
+    regime = None
+    try:
+        mkt_long = layers.get_market_history_long()
+        if mkt_long and len(mkt_long) >= 310:
+            regime = layers.env_regime([r["close"] for r in mkt_long])
+    except Exception:
+        regime = None
     results = []
     for ind_name, rows in ind_cache.items():
         if not ind_name or ind_name == "未知" or len(rows) < 25:
@@ -1341,14 +1349,33 @@ def api_industry_trend():
             "independent": indep, "excess": excess, "streak": streak,
             "rho": rho, "up_beta": up_beta, "dn_beta": dn_beta, "rho_n": rho_n,
         })
-    # 排序：独立行情置顶（按跑赢幅度降序），up 排前（按score降序），sideways 中间，down 排后
+    # 排序（按大盘环境分层）：
+    #   回避区(熊市反弹/牛深回调/深熊底)：独立行情绝对置顶(逆势强势最稀缺) → 上升 → 横盘 → 下降
+    #   健康牛：顺势上升优先(score主导)，独立行情不特殊置顶(牛市中逆势罕见)
+    #   方向不明/其他：独立行情置顶 → 上升 → 横盘 → 下降
     dir_rank = {"up": 0, "sideways": 1, "down": 2}
-    results.sort(key=lambda x: (0 if x["independent"] else 1 + dir_rank.get(x["direction"], 3),
-                                -x["excess"] if x["independent"] else -x["score"]))
+    rk = regime.get("key") if regime else None
+    def _sort_key(x):
+        indep = 1 if x["independent"] else 0
+        d = x["direction"]
+        if rk in ("bear_rally", "bull_pullback", "bear_bottom"):
+            return (0 if indep else 1 + dir_rank.get(d, 3),
+                    -x["excess"] if indep else -x["score"])
+        if rk == "bull_strong":
+            return (dir_rank.get(d, 3), -x["score"])
+        return (0 if indep else 1 + dir_rank.get(d, 3),
+                -x["excess"] if indep else -x["score"])
+    results.sort(key=_sort_key)
     total_up = sum(1 for r in results if r["direction"] == "up")
     total_indep = sum(1 for r in results if r["independent"])
+    reg_info = None
+    if regime:
+        reg_info = {"key": regime["key"], "state": regime["state"],
+                    "up60": regime.get("up60"), "avg60": regime.get("avg60"),
+                    "desc": regime.get("desc", "")}
     return jsonify({"ok": True, "total_up": total_up, "total_ind": len(results),
-                    "total_indep": total_indep, "mkt_mom20": mkt_mom20, "items": results})
+                    "total_indep": total_indep, "mkt_mom20": mkt_mom20,
+                    "regime": reg_info, "items": results})
 
 
 @app.route("/api/industry/<ind_name>/stocks")
@@ -1357,8 +1384,14 @@ def api_industry_stocks(ind_name):
     并行拉取K线+信号检测，结果缓存10分钟。"""
     import urllib.parse
     ind_name = urllib.parse.unquote(ind_name)
-    # 缓存命中（10分钟）
-    _c = INDUSTRY_STOCKS_CACHE.get(ind_name)
+    try:
+        offset = max(0, int(request.args.get("offset", 0) or 0))
+    except Exception:
+        offset = 0
+    PAGE = 50
+    # 缓存命中（10分钟, 按 行业+页码 分页缓存）
+    _ck = ind_name + "|" + str(offset)
+    _c = INDUSTRY_STOCKS_CACHE.get(_ck)
     if _c and time.time() - _c[0] < 600:
         return jsonify(_c[1])
     pool = _effective_pool()
@@ -1366,36 +1399,20 @@ def api_industry_stocks(ind_name):
         return jsonify({"ok": False, "msg": "高适配池为空（基本面过滤后无匹配股票，可在设置中关闭过滤）"}), 500
     ind_stocks = [s for s in pool if s.get("ind") == ind_name]
     if not ind_stocks:
-        return jsonify({"ok": True, "industry": ind_name, "items": []})
+        return jsonify({"ok": True, "industry": ind_name, "items": [], "total_in_ind": 0, "has_more": False})
     total_in_ind = len(ind_stocks)
-    stocks = ind_stocks[:50]
+    stocks = ind_stocks[offset:offset + PAGE]
 
     # 行业指数近30日序列（用于与个股走势对比）。
-    # 关键修复：历史行业指数缓存口径过时（旧复权/旧成分），与个股 qfq 不一致，
-    # 导致行业橙线系统性虚高、个股蓝线被压低。这里改用「当前市值Top15成分股
-    # qfq K线」实时等权合成，与个股 spark_stock 完全同口径，对比才真实。
+    # 口径统一：直接使用看板同一套 ind_daily 等权行业指数（25年长历史, 池内全成分等权），
+    # 与个股 qfq K线对齐对比；不再实时拉 Top15 合成（省掉每行业15次接口请求, 个股页更快,
+    # 且消除"看板全成分 vs 个股页Top15"两套口径不一致的问题）。
     ind_spark_cache = {}
     try:
-        _ind_top = sorted([s for s in pool if s.get("ind") == ind_name],
-                          key=lambda s: -s.get("mv", 0))[:15]
-        _series = {}
-        for _m in _ind_top:
-            try:
-                _dk = df.get_kline(_m.get("code"), "daily", 40, "qfq")
-                if _dk is None or len(_dk) < 31:
-                    continue
-                for _, _row in _dk.iterrows():
-                    _series.setdefault(str(_row["date"]), []).append(float(_row["close"]))
-            except Exception:
-                continue
-        if _series:
-            # 小行业(成分<5只)时, 按实际成分数放宽"至少有几天可计入"的阈值, 避免行业指数被全部过滤成直线
-            _min_n = min(5, max(1, len(_ind_top)))
-            _rows = sorted([{"date": d, "close": sum(v) / len(v)}
-                            for d, v in _series.items() if len(v) >= _min_n], key=lambda x: x["date"])
-            ind_spark_cache = {r["date"]: r["close"] for r in _rows[-40:]}
+        _ind_rows_all = layers._load_ind_cache().get(ind_name) or []
+        ind_spark_cache = {str(r["date"]): float(r["close"]) for r in _ind_rows_all}
     except Exception:
-        pass
+        ind_spark_cache = {}
     ind_dates = sorted(ind_spark_cache.keys())
 
     def _ind_series(daily):
@@ -1469,8 +1486,9 @@ def api_industry_stocks(ind_name):
     items.sort(key=lambda x: (len(x["signals"]) > 0, len(x["signals"])), reverse=True)
     with_signal = sum(1 for it in items if it["has_signal"])
     result = {"ok": True, "industry": ind_name, "total_in_ind": total_in_ind,
-              "with_signal": with_signal, "items": items[:50]}
-    INDUSTRY_STOCKS_CACHE[ind_name] = (time.time(), result)
+              "with_signal": with_signal, "items": items,
+              "page": offset // PAGE, "has_more": offset + PAGE < total_in_ind}
+    INDUSTRY_STOCKS_CACHE[_ck] = (time.time(), result)
     return jsonify(result)
 
 
