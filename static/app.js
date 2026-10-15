@@ -2117,9 +2117,9 @@
           go.style.display = "";
           go.onclick = function () { applyDownload(d.download); };
         } else {
-          updShow((d.note && d.note.indexOf("直连") >= 0)
-            ? "当前已是最新版本 <b>" + (d.current || "-") + "</b><br><br>如果你是从对话里拿到的新版本链接，请用下方“手动升级”输入框粘贴链接后升级。"
-            : (d.note || "当前已是最新版本 " + (d.current || "-")));
+          var baseTxt = "✅ 当前已是最新版本 <b>" + (d.current || "-") + "</b>（已自动检查 GitHub 版本清单）";
+          if (d.note) baseTxt += "<br><br>本次更新说明：" + d.note;
+          updShow(baseTxt);
         }
       } else if (d && d.msg) {
         curEl.textContent = "-";
