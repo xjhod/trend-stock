@@ -1,5 +1,5 @@
 {
-  "version": "1.9.57",
-  "download": "https://aka.doubaocdn.com/s/hAqKlOsIYX",
-  "note": "K线红绿按A股涨跌惯例着色(收vs昨收), 修复假阳线红K"
+  "version": "1.9.58",
+  "download": "https://aka.doubaocdn.com/s/Q8R2XzrYlY",
+  "note": "行业独立行情参数回测校准: (5%,0.5%,3pp,5天) 20日跑赢53%"
 }

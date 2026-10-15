@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.57"
+_BACKEND_VERSION = "1.9.58"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -925,8 +925,11 @@ def _diag_industry(ind_name):
 
 def _ind_independent(rows, mkt_rows=None):
     """判断行业是否处于"独立行情"：
-    ① 行业20日动量 ≥ +3%  ② 大盘20日动量 < +1%（不强）
-    ③ 超额(行业−大盘) ≥ +3个百分点  ④ 连续满足 ≥ 3天（排除单日噪音）
+    ① 行业20日动量 ≥ +5%  ② 大盘20日动量 < +0.5%（不强）
+    ③ 超额(行业−大盘) ≥ +3个百分点  ④ 连续满足 ≥ 5天（排除单日噪音）
+    回测校准(2002-2026, 行业30年历史): (5%,0.5%,3pp,5天)信号后20日跑赢53.0%/超额+2.1pp,
+    基准全部行业20日跑赢47.6%/超额+0.77pp; 原参数(3%,1%,3pp,3天)≈无效(20日跑赢48.2%)。
+    超额阈值C经网格验证不敏感, 保持3pp。
     返回 (independent, excess_pct, mkt_mom20_pct, streak_days)
     """
     if mkt_rows is None:
@@ -953,7 +956,7 @@ def _ind_independent(rows, mkt_rows=None):
             break
         ind_mom = closes[i] / closes[i - 21] - 1
         ex = (ind_mom - mm) * 100
-        if ind_mom * 100 >= 3 and mm * 100 < 1 and ex >= 3:
+        if ind_mom * 100 >= 5 and mm * 100 < 0.5 and ex >= 3:
             streak += 1
             excess = ex
         else:
@@ -962,7 +965,7 @@ def _ind_independent(rows, mkt_rows=None):
     if mm_cur is None:
         return False, 0, None, streak
     ind_cur = closes[-1] / closes[-21] - 1
-    independent = streak >= 3 and ind_cur * 100 >= 3 and mm_cur * 100 < 1
+    independent = streak >= 5 and ind_cur * 100 >= 5 and mm_cur * 100 < 0.5
     return independent, round(excess, 1), round(mm_cur * 100, 1), streak
 
 
