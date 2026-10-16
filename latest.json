@@ -1,5 +1,5 @@
 {
-  "version": "1.9.58",
-  "download": "https://aka.doubaocdn.com/s/Q8R2XzrYlY",
-  "note": "行业独立行情参数回测校准: (5%,0.5%,3pp,5天) 20日跑赢53%"
+  "version": "1.9.59",
+  "download": "https://aka.doubaocdn.com/s/BhErFZPfsI",
+  "note": "策略F落地: 行业轮动页新增超跌观察(双深行业+池内候选股)"
 }

@@ -2388,6 +2388,31 @@
           window.__indRegNote = regNote;
         }
       }
+      // 超跌反弹观察（策略F, 回测: 行业20日跌>8%&60日跌>25% → 未来20日+10.4%/40日+17%）
+      const losersEl = document.getElementById("ind-losers");
+      if (losersEl) {
+        const lz = data.losers || [];
+        if (lz.length) {
+          losersEl.style.display = "";
+          const regTip = (data.regime && data.regime.key === "bull_pullback") ? "当前牛深回调：短期或再跌，宜分批、持有20-40日" : "回测参考：未来20日行业均涨约+10%";
+          losersEl.innerHTML =
+            '<div style="padding:8px 12px;margin-bottom:8px;border:1px dashed #2f9e44;border-radius:8px;font-size:12px;line-height:1.7;background:rgba(47,158,68,.05);">' +
+            '<div style="font-weight:700;color:#2f9e44;margin-bottom:2px;">超跌观察 · ' + lz.length + ' 个行业（跌超20日8%+60日25%）</div>' +
+            '<div style="color:var(--text-dim);font-size:11px;">' + regTip + '</div>' +
+            lz.map(function (l) {
+              const candTxt = (l.cands && l.cands.length)
+                ? '<span style="color:var(--text-dim);font-size:11px;">池内候选: ' + l.cands.map(function (x) { return x.name + "(" + x.m20 + "%)"; }).join(" · ") + '</span>'
+                : '<span style="color:var(--text-dim);font-size:11px;">池内暂无跟随下跌的候选股</span>';
+              return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed rgba(47,158,68,.2);">' +
+                '<span style="font-weight:600;color:#2f9e44;">' + l.name + '</span>' +
+                '<span style="color:#A14E50;font-size:12px;">20日 ' + l.ret20 + '%</span>' +
+                '<span style="color:#A14E50;font-size:12px;">60日 ' + l.mom60 + '%</span>' + candTxt + '</div>';
+            }).join("") + '</div>';
+        } else {
+          losersEl.style.display = "none";
+          losersEl.innerHTML = "";
+        }
+      }
       listEl.innerHTML = "";
       if (window.__indRegNote) {
         var _regBar = document.createElement("div");

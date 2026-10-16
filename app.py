@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.58"
+_BACKEND_VERSION = "1.9.59"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1382,9 +1382,14 @@ def api_industry_trend():
         strong_n = sum(1 for s in ind_stocks if str(s.get("code")) in _strong_codes)
         indep, excess, _mm, streak = _ind_independent(rows, mkt_rows)
         rho, up_beta, dn_beta, rho_n = _ind_rho_beta(rows, mkt_rows)
+        # 60日跌幅(超跌反弹候选用): 需≥61根
+        mom60 = None
+        if len(rows) >= 61 and rows[-61]["close"]:
+            mom60 = round((rows[-1]["close"] / rows[-61]["close"] - 1) * 100, 1)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
+            "mom60": mom60,
             "stock_count": count, "strong_n": strong_n,
             "latest_close": round(rows[-1]["close"], 2),
             "independent": indep, "excess": excess, "streak": streak,
@@ -1413,6 +1418,33 @@ def api_industry_trend():
     results.sort(key=_sort_key)
     total_up = sum(1 for r in results if r["direction"] == "up")
     total_indep = sum(1 for r in results if r["independent"])
+    # 超跌反弹候选（策略F, 2002-2026回测: 行业20日跌>8% & 60日跌>25% → 未来20日平均+10.4%,
+    #   40日+17.0%; 仅健康牛/深熊底/牛深回调有效, 熊市反弹禁(20日-3%))
+    losers = []
+    if rk in ("bull_strong", "bear_bottom", "bull_pullback"):
+        for r_ in results:
+            if r_["ret20"] is None or r_["mom60"] is None:
+                continue
+            if r_["ret20"] <= -8 and r_["mom60"] <= -25:
+                # 池内候选股: 排除逆势暴涨(个股20日>0), 只留跟随行业下跌的(回测: 随跌组20日+3.37% vs 逆势+2.45%)
+                cands = []
+                for _s in pool:
+                    if _s.get("ind") != r_["name"]:
+                        continue
+                    _seq = [v for _, v in _by.get(str(_s.get("code")), [])]
+                    if len(_seq) < 21:
+                        continue
+                    _m20 = (_seq[-1] / _seq[-21] - 1) * 100
+                    if _m20 < -3:
+                        cands.append({"code": str(_s.get("code")), "name": _s.get("name", ""),
+                                     "m20": round(_m20, 1)})
+                cands.sort(key=lambda x: x["m20"])
+                losers.append({
+                    "name": r_["name"], "ret20": r_["ret20"], "mom60": r_["mom60"],
+                    "direction": r_["direction"],
+                    "cands": cands[:3],
+                })
+        losers.sort(key=lambda x: x["mom60"])
     reg_info = None
     if regime:
         reg_info = {"key": regime["key"], "state": regime["state"],
@@ -1420,7 +1452,7 @@ def api_industry_trend():
                     "desc": regime.get("desc", "")}
     _resp = {"ok": True, "total_up": total_up, "total_ind": len(results),
              "total_indep": total_indep, "mkt_mom20": mkt_mom20,
-             "regime": reg_info, "items": results}
+             "regime": reg_info, "items": results, "losers": losers}
     INDUSTRY_TREND_CACHE["v"] = (_tm.time(), _resp)
     return jsonify(_resp)
 
