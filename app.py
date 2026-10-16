@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.60"
+_BACKEND_VERSION = "1.9.61"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -42,6 +42,8 @@ def _effective_pool():
     银行等金融行业新浪不披露营收增速(rev_g=None), 只要净利正增长即保留。
     开关关: 返回完整池。过滤是本地秒级操作, 不触发任何网络拉取。"""
     pool = _load_pool_raw()
+    # 排除创业板（300/301开头, 用户要求: 创业板不进高适配池; 无条件过滤, 旧池文件同样生效）
+    pool = [s for s in pool if not str(s.get("code", "")).startswith(("300", "301", "688", "689"))]
     try:
         basic = notify.load_config().get("market", {}).get("basic_filter", False)
     except Exception:

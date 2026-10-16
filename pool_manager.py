@@ -85,6 +85,8 @@ def _stock_candidate(all_a, threshold):
         code = str(x.get("code", ""))
         if len(code) != 6 or code[0] not in "603":
             continue
+        if code.startswith(("300", "301", "688", "689")):
+            continue  # 排除创业板+科创板（用户要求: 高适配池只留沪深主板）
         name = str(x.get("name", ""))
         if "ST" in name.upper() or "退" in name or "PT" in name.upper():
             continue

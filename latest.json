@@ -1,5 +1,5 @@
 {
-  "version": "1.9.60",
-  "download": "https://aka.doubaocdn.com/s/oVG9mWXFA7",
-  "note": "超跌观察候选股可点击跳转个股查询页"
+  "version": "1.9.61",
+  "download": "https://aka.doubaocdn.com/s/LQ9Nb0PsBR",
+  "note": "高适配池只留沪深主板: 排除创业板(300/301)+科创板(688/689)"
 }
