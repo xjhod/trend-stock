@@ -2401,7 +2401,9 @@
             '<div style="color:var(--text-dim);font-size:11px;">' + regTip + '</div>' +
             lz.map(function (l) {
               const candTxt = (l.cands && l.cands.length)
-                ? '<span style="color:var(--text-dim);font-size:11px;">池内候选: ' + l.cands.map(function (x) { return x.name + "(" + x.m20 + "%)"; }).join(" · ") + '</span>'
+                ? '<span style="color:var(--text-dim);font-size:11px;">池内候选: ' + l.cands.map(function (x) {
+                    return '<span class="loser-cand" data-code="' + x.code + '" style="color:#4da3ff;cursor:pointer;text-decoration:underline;white-space:nowrap;" title="点击查看个股">' + x.name + '</span>(' + x.m20 + '%)';
+                  }).join(" · ") + '</span>'
                 : '<span style="color:var(--text-dim);font-size:11px;">池内暂无跟随下跌的候选股</span>';
               return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed rgba(47,158,68,.2);">' +
                 '<span style="font-weight:600;color:#2f9e44;">' + l.name + '</span>' +
@@ -2412,6 +2414,9 @@
           losersEl.style.display = "none";
           losersEl.innerHTML = "";
         }
+        losersEl.querySelectorAll(".loser-cand").forEach(function (el) {
+          el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
+        });
       }
       listEl.innerHTML = "";
       if (window.__indRegNote) {
