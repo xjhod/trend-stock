@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.61"
+_BACKEND_VERSION = "1.9.62"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1388,10 +1388,17 @@ def api_industry_trend():
         mom60 = None
         if len(rows) >= 61 and rows[-61]["close"]:
             mom60 = round((rows[-1]["close"] / rows[-61]["close"] - 1) * 100, 1)
+        # 短线启动信号用: 5日斜率 / 20日前的20日动量(判断"由负转正")
+        ret5 = None
+        if len(rows) >= 6 and rows[-6]["close"]:
+            ret5 = round((rows[-1]["close"] / rows[-6]["close"] - 1) * 100, 1)
+        ret20_prev = None
+        if len(rows) >= 42 and rows[-21]["close"] and rows[-41]["close"]:
+            ret20_prev = round((rows[-21]["close"] / rows[-41]["close"] - 1) * 100, 1)
         results.append({
             "name": ind_name, "direction": direction, "strength": strength,
             "score": score, "ma20_slope": ma20_slope, "ret20": ret20,
-            "mom60": mom60,
+            "mom60": mom60, "ret5": ret5, "ret20_prev": ret20_prev,
             "stock_count": count, "strong_n": strong_n,
             "latest_close": round(rows[-1]["close"], 2),
             "independent": indep, "excess": excess, "streak": streak,
@@ -1447,6 +1454,33 @@ def api_industry_trend():
                     "cands": cands[:3],
                 })
         losers.sort(key=lambda x: x["mom60"])
+    # 短线启动观察（方案一: 与超跌观察并列, 只提示不自动选股）
+    #   信号 = 5日斜率>=5% 且 20日动量由负转正(当前>0, 20日前<=0) → 刚启动的短线主线
+    #   例: 电机Ⅱ 10月中旬6日+30% = 20日动量由负转正 + 5日斜率骤升(9月初动量分位仅3%)
+    #   附行业内"池内短线强势股"top3 作参考(近5日涨>0, 按5日涨幅排序)
+    START_SLOPE = 5.0   # 5日斜率阈值(%)（参数可调）
+    START_TOP_N = 8     # 最多展示行业数
+    starters = []
+    for r_ in results:
+        if r_.get("ret5") is None or r_.get("ret20_prev") is None or r_.get("ret20") is None:
+            continue
+        if r_["ret5"] >= START_SLOPE and r_["ret20"] > 0 and r_["ret20_prev"] <= 0:
+            hot = []
+            for _s in pool:
+                if _s.get("ind") != r_["name"]:
+                    continue
+                _seq = [v for _, v in _by.get(str(_s.get("code")), [])]
+                if len(_seq) < 6:
+                    continue
+                _r5 = (_seq[-1] / _seq[-6] - 1) * 100
+                if _r5 > 0:
+                    hot.append({"code": str(_s.get("code")), "name": _s.get("name", ""),
+                                "ret5": round(_r5, 1)})
+            hot.sort(key=lambda x: -x["ret5"])
+            starters.append({"name": r_["name"], "ret5": r_["ret5"], "ret20": r_["ret20"],
+                             "ret20_prev": r_["ret20_prev"], "hot": hot[:3]})
+    starters.sort(key=lambda x: -x["ret5"])
+    starters = starters[:START_TOP_N]
     reg_info = None
     if regime:
         reg_info = {"key": regime["key"], "state": regime["state"],
@@ -1454,7 +1488,7 @@ def api_industry_trend():
                     "desc": regime.get("desc", "")}
     _resp = {"ok": True, "total_up": total_up, "total_ind": len(results),
              "total_indep": total_indep, "mkt_mom20": mkt_mom20,
-             "regime": reg_info, "items": results, "losers": losers}
+             "regime": reg_info, "items": results, "losers": losers, "starters": starters}
     INDUSTRY_TREND_CACHE["v"] = (_tm.time(), _resp)
     return jsonify(_resp)
 

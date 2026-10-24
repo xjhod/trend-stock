@@ -2388,6 +2388,36 @@
           window.__indRegNote = regNote;
         }
       }
+      // 短线启动观察（方案一: 5日斜率>=5% + 20日动量由负转正, 只提示不自动选股）
+      const startersEl = document.getElementById("ind-starters");
+      if (startersEl) {
+        const st = data.starters || [];
+        if (st.length) {
+          startersEl.style.display = "";
+          startersEl.innerHTML =
+            '<div style="padding:8px 12px;margin-bottom:8px;border:1px dashed #4da3ff;border-radius:8px;font-size:12px;line-height:1.7;background:rgba(77,163,255,.06);">' +
+            '<div style="font-weight:700;color:#4da3ff;margin-bottom:2px;">短线启动 · ' + st.length + ' 个行业（5日斜率≥5%+20日动量由负转正）</div>' +
+            '<div style="color:var(--text-dim);font-size:11px;">刚启动的短线主线，只提示不自动选股；行业内为池内短线强势股参考（近5日涨）</div>' +
+            st.map(function (s) {
+              const hotTxt = (s.hot && s.hot.length)
+                ? '<span style="color:var(--text-dim);font-size:11px;">池内活跃: ' + s.hot.map(function (x) {
+                    return '<span class="starter-hot" data-code="' + x.code + '" style="color:#e5484d;cursor:pointer;text-decoration:underline;white-space:nowrap;" title="点击查看个股">' + x.name + '</span>(+' + x.ret5 + '%)';
+                  }).join(" · ") + '</span>'
+                : '<span style="color:var(--text-dim);font-size:11px;">池内暂无短线强势股</span>';
+              return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 0;border-top:1px dashed rgba(77,163,255,.25);">' +
+                '<span style="font-weight:600;color:#4da3ff;">' + s.name + '</span>' +
+                '<span style="color:#e5484d;font-size:12px;">5日 +' + s.ret5 + '%</span>' +
+                '<span style="color:#2f9e44;font-size:12px;">20日 +' + s.ret20 + '%</span>' +
+                '<span style="color:var(--text-dim);font-size:11px;">(20日前 ' + (s.ret20_prev > 0 ? "+" : "") + s.ret20_prev + '%→转正)</span>' + hotTxt + '</div>';
+            }).join("") + '</div>';
+        } else {
+          startersEl.style.display = "none";
+          startersEl.innerHTML = "";
+        }
+        startersEl.querySelectorAll(".starter-hot").forEach(function (el) {
+          el.addEventListener("click", function () { selectStock(el.getAttribute("data-code")); });
+        });
+      }
       // 超跌反弹观察（策略F, 回测: 行业20日跌>8%&60日跌>25% → 未来20日+10.4%/40日+17%）
       const losersEl = document.getElementById("ind-losers");
       if (losersEl) {
