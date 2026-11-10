@@ -2397,7 +2397,7 @@
           startersEl.innerHTML =
             '<div style="padding:8px 12px;margin-bottom:8px;border:1px dashed #4da3ff;border-radius:8px;font-size:12px;line-height:1.7;background:rgba(77,163,255,.06);">' +
             '<div style="font-weight:700;color:#4da3ff;margin-bottom:2px;">短线启动 · ' + st.length + ' 个行业（5日斜率≥5%+20日动量由负转正）</div>' +
-            '<div style="color:var(--text-dim);font-size:11px;">刚启动的短线主线，只提示不自动选股；行业内为池内短线强势股参考（近5日涨）</div>' +
+            '<div style="color:var(--text-dim);font-size:11px;">刚启动的短线主线，只提示不自动选股；行业内为池内短线强势股参考（近5日涨）· 列表过长时可在框内上下滚动</div>' +
             st.map(function (s) {
               const hotTxt = (s.hot && s.hot.length)
                 ? '<span style="color:var(--text-dim);font-size:11px;">池内活跃: ' + s.hot.map(function (x) {
