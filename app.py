@@ -8,7 +8,7 @@ import threading
 import time
 
 # 后端代码版本（与 VERSION 文件保持同步；硬编码便于前端显示后端进程实际加载的版本）
-_BACKEND_VERSION = "1.9.63"
+_BACKEND_VERSION = "1.9.64"
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -1760,15 +1760,34 @@ if __name__ == "__main__":
         except Exception:
             return False
     _already_running = False
+    _stale_lock = False
     # 1) PID 锁文件
+    # 注意：Windows 会复用 PID。若旧进程被 taskkill 后其 PID 恰好被其它系统进程占用，
+    # 仅凭 _pid_alive 会误判"已在运行"并直接退出（表现为窗口闪退、浏览器连接被拒绝）。
+    # 因此 PID 存活时必须再确认 5000 端口真的可连通，否则一律视为陈旧锁文件并清理。
     try:
         if _os.path.exists(_LOCK_FILE):
             with open(_LOCK_FILE, encoding="utf-8") as _lf:
                 _old_pid = int(_lf.read().strip())
             if _pid_alive(_old_pid):
-                _already_running = True
+                try:
+                    _probe0 = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                    _probe0.settimeout(0.5)
+                    _probe0.connect((_HOST, 5000))
+                    _probe0.close()
+                    _already_running = True
+                except Exception:
+                    _stale_lock = True  # PID 被别的进程复用了，不是本软件
+            else:
+                _stale_lock = True
     except Exception:
-        pass
+        _stale_lock = True
+    if _stale_lock and not _already_running:
+        try:
+            _os.remove(_LOCK_FILE)
+            print("已清理上次残留的 PID 锁文件（旧进程确认不在），继续启动。")
+        except Exception as e:
+            print("清理 PID 锁文件失败:", e)
     # 2) 端口探测
     if not _already_running:
         try:
@@ -1803,6 +1822,52 @@ if __name__ == "__main__":
     scan_daily.schedule_daily(15, 35)
     threading.Timer(60, scan_daily.maybe_scan_on_startup).start()  # 延迟60秒扫描, 避免刚启动就看盘时CPU被吃满
     print("趋势全景股票分析服务启动: http://127.0.0.1:5000")
+    print("提示：请在浏览器输入 http://127.0.0.1:5000 访问，不要加 https（本机服务是纯 HTTP）。")
+
+    # 400 日志折叠：浏览器误用 https 连接纯 HTTP 端口时会连续产生
+    # "Bad request version"/"Bad request syntax"，waitress 会逐条打印导致 cmd 刷屏。
+    # 这里把同类日志折叠为每分钟最多一条，并在该条后附访问提示。
+    try:
+        import logging as _logging
+
+        class _BadReqFoldFilter(_logging.Filter):
+            def __init__(self, interval=60.0):
+                super().__init__()
+                self._interval = interval
+                self._win_start = 0.0
+                self._folded = 0
+
+            def filter(self, record):
+                try:
+                    _m = record.getMessage()
+                except Exception:
+                    return True
+                if "Bad request" not in _m:
+                    return True
+                _now = time.time()
+                if _now - self._win_start < self._interval:
+                    self._folded += 1
+                    return False
+                _extra = ""
+                if self._folded:
+                    _extra = "（过去%.0f秒内同类400共%d次，已折叠）" % (self._interval, self._folded + 1)
+                self._folded = 0
+                self._win_start = _now
+                record.msg = str(_m) + _extra + " → 请改用 http://127.0.0.1:5000 访问"
+                record.args = ()
+                return True
+
+        _fold = _BadReqFoldFilter()
+        for _lgname in ("waitress", "waitress.queue", "_waitress"):
+            try:
+                _lg = _logging.getLogger(_lgname)
+                _lg.addFilter(_fold)
+            except Exception:
+                pass
+        _logging.getLogger("werkzeug").addFilter(_fold)
+    except Exception as _e:
+        print("400日志折叠初始化失败（不影响使用）:", _e)
+
     # 优先使用 waitress（生产级服务器，比 Flask 开发服务器省 CPU）；未安装则回退 Flask
     try:
         from waitress import serve
