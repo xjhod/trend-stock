@@ -1,1 +1,1 @@
-{"version": "1.9.65", "direct_url": "https://aka.doubaocdn.com/s/CpctdbOwFi", "note": "修复行业轮动页短线启动/超跌观察区块过高导致下方列表被挤压且无法滚动（区块限高38vh并支持框内滚动）"}
+{"version": "1.9.66", "direct_url": "https://aka.doubaocdn.com/s/TP6Dl6s5AB", "note": "修复update.bat等4个脚本LF行尾导致命令解析错乱(危险del提示)统一改CRLF; 短线启动/超跌观察区块限高可滚"}

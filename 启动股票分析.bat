@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 title 趋势全景 · 股票分析
 cd /d "%~dp0"
 
