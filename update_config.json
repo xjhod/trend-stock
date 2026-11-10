@@ -1,1 +1,1 @@
-{"version": "1.9.66", "direct_url": "https://aka.doubaocdn.com/s/TP6Dl6s5AB", "note": "修复update.bat等4个脚本LF行尾导致命令解析错乱(危险del提示)统一改CRLF; 短线启动/超跌观察区块限高可滚"}
+{"version": "1.9.67", "direct_url": "https://aka.doubaocdn.com/s/R5VF2m87u5", "note": "左侧行业面板改为单层滚动: 短线启动/超跌观察不再单独限高,整个左栏一根滚动条,内容可连续滚到底"}

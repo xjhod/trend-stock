@@ -648,3 +648,31 @@ body.lowkey #empty-state { color:#69707a; font-size:13px; }
 }
 .ind-starters::-webkit-scrollbar-thumb:hover,
 .ind-losers::-webkit-scrollbar-thumb:hover { background: rgba(77,163,255,.85); }
+
+/* ---------- 左侧行业面板统一滚动（v1.9.67） ----------
+   上一版给 ind-starters/ind-losers 单独限高+内部滚动，形成"嵌套滚动"：
+   鼠标滚轮常滚到内层，外层仍把内容裁掉，实际还是看不全。
+   改为：整个 #panel-industry 只保留一层滚动，区内所有内容连续排布、一起滚到底。 */
+#panel-industry {
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+#panel-industry > .ind-starters,
+#panel-industry > .ind-losers {
+  flex: 0 0 auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+#panel-industry > .ind-list {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+#panel-industry::-webkit-scrollbar { width: 8px; }
+#panel-industry::-webkit-scrollbar-track { background: transparent; }
+#panel-industry::-webkit-scrollbar-thumb {
+  background: rgba(77,163,255,.45);
+  border-radius: 4px;
+}
+#panel-industry::-webkit-scrollbar-thumb:hover { background: rgba(77,163,255,.8); }
